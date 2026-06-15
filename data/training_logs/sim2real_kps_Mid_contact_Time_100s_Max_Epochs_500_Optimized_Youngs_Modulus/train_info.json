@@ -1,0 +1,13 @@
+{
+    "optimize_subject": [
+        "Youngs_Modulus"
+    ],
+    "lr": [
+        0.01
+    ],
+    "optimized_method": null,
+    "max_epochs": 500,
+    "stop_condition": "convergence",
+    "convergence_patience": 5,
+    "relative_change_threshold": 0.001
+}

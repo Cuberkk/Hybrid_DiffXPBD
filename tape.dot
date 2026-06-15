@@ -1,0 +1,162 @@
+digraph " " {
+    graph [fontname="Helvetica,Arial,sans-serif",tooltip=" "];
+    node [style=rounded,shape=plaintext,fontname="Helvetica,Arial,sans-serif", margin="0.05,0.02", width=0, height=0, tooltip=" "];
+    edge [fontname="Helvetica,Arial,sans-serif",tooltip=" "];
+    rankdir=LR;
+
+kernel0 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>update_gamma_from_youngs_kernel</b></TD></TR>
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">youngs</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_1" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">gamma</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_2" BGCOLOR="#BBBBBB" align="left" title="dtype=warp._src.types.float32"><font color="black">poisson_ratio</font></TD><TD BORDER="0"></TD></TR>
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;DiffXPBD.py:632 (update_gamma_from_youngs)"];
+arr12918769152 [label="E",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array E / ptr=12918769152, shape=(1,), dtype=warp._src.types.float32, requires_grad=True"];
+arr12918769152 -> kernel0:in_0
+kernel1 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>update_b_inv_from_youngs_kernel</b></TD></TR>
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">youngs</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_1" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.int32"><font color="black">fixed_mask</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_2" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">b_inv</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_3" BGCOLOR="#BBBBBB" align="left" title="dtype=warp._src.types.float32"><font color="black">poisson_ratio</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_4" BGCOLOR="#BBBBBB" align="left" title="dtype=warp._src.types.float32"><font color="black">dt</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_5" BGCOLOR="#BBBBBB" align="left" title="dtype=warp._src.types.float32"><font color="black">avg_edge</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_6" BGCOLOR="#BBBBBB" align="left" title="dtype=warp._src.types.int32"><font color="black">selected_vid</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_7" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">b_amp</font></TD><TD BORDER="0"></TD></TR>
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;DiffXPBD.py:638 (update_b_inv_from_youngs)"];
+arr12918769152 -> kernel1:in_0
+arr12918762496 [label="fixed_mask",shape=ellipse,style=filled,fillcolor="lightgray",tooltip="Array fixed_mask / ptr=12918762496, shape=(522,), dtype=warp._src.types.int32, requires_grad=False"];
+arr12918762496 -> kernel1:in_1
+arr12942223360 [label="b_amp",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array b_amp / ptr=12942223360, shape=(1,), dtype=warp._src.types.float32, requires_grad=True"];
+arr12942223360 -> kernel1:in_7
+kernel2 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>update_compliance_from_youngs_kernel</b></TD></TR>
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">youngs</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_1" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">tet_volume</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_2" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.mat22f"><font color="black">compliance</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_3" BGCOLOR="#BBBBBB" align="left" title="dtype=warp._src.types.float32"><font color="black">poisson_ratio</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_4" BGCOLOR="#BBBBBB" align="left" title="dtype=warp._src.types.float32"><font color="black">dt</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_5" BGCOLOR="#BBBBBB" align="left" title="dtype=warp._src.types.float32"><font color="black">compliance_modulation</font></TD><TD BORDER="0"></TD></TR>
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;DiffXPBD.py:646 (update_compliance_from_youngs)"];
+arr12918769152 -> kernel2:in_0
+arr12918641152 [label="tet_volume",shape=ellipse,style=filled,fillcolor="lightgray",tooltip="Array tet_volume / ptr=12918641152, shape=(1273,), dtype=warp._src.types.float32, requires_grad=False"];
+arr12918641152 -> kernel2:in_1
+kernel3 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>update_external_force_kernel</b></TD></TR>
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">gravity_force</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_1" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.int32"><font color="black">applied_mask</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_2" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">applied_force_per_vertex</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_3" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">external_force</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_4" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">applied_force_amp</font></TD><TD BORDER="0"></TD></TR>
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;DiffXPBD.py:654 (update_external_force)"];
+arr12929276928 [label="gravity_force",shape=ellipse,style=filled,fillcolor="lightgray",tooltip="Array gravity_force / ptr=12929276928, shape=(522,), dtype=warp._src.types.vec3f, requires_grad=False"];
+arr12929276928 -> kernel3:in_0
+arr12918765056 [label="applied_mask",shape=ellipse,style=filled,fillcolor="lightgray",tooltip="Array applied_mask / ptr=12918765056, shape=(522,), dtype=warp._src.types.int32, requires_grad=False"];
+arr12918765056 -> kernel3:in_1
+arr12952627712 [label="F",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array F / ptr=12952627712, shape=(1,), dtype=warp._src.types.vec3f, requires_grad=True"];
+arr12952627712 -> kernel3:in_2
+arr12947121664 [label="external_force",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array external_force / ptr=12947121664, shape=(522,), dtype=warp._src.types.vec3f, requires_grad=True"];
+arr12947121664 -> kernel3:in_3
+arr12959207424 [label="applied_force_amp",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array applied_force_amp / ptr=12959207424, shape=(1,), dtype=warp._src.types.float32, requires_grad=True"];
+arr12959207424 -> kernel3:in_4
+kernel4 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>update_external_part_from_b_inv_kernel</b></TD></TR>
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">external_force</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_1" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">b_inv</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_2" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">external_part</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_3" BGCOLOR="#BBBBBB" align="left" title="dtype=warp._src.types.float32"><font color="black">dt</font></TD><TD BORDER="0"></TD></TR>
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;DiffXPBD.py:662 (update_external_part_from_youngs)"];
+arr12947121664 -> kernel4:in_0
+arr12949533696 [label="external_part",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array external_part / ptr=12949533696, shape=(522,), dtype=warp._src.types.vec3f, requires_grad=True"];
+arr12949533696 -> kernel4:in_2
+kernel5 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>predictor_step_tape_kernel</b></TD></TR>
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">x_state</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_1" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">external_part</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_2" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">x_stage0</font></TD><TD BORDER="0"></TD></TR>
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;DiffXPBD.py:779 (predictor_step_tape)"];
+arr12929310208 [label="x_state",shape=ellipse,style=filled,fillcolor="lightgray",tooltip="Array x_state / ptr=12929310208, shape=(522,), dtype=warp._src.types.vec3f, requires_grad=False"];
+arr12929310208 -> kernel5:in_0
+arr12949533696 -> kernel5:in_1
+arr12965092864 [label="x_stage0",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array x_stage0 / ptr=12965092864, shape=(522,), dtype=warp._src.types.vec3f, requires_grad=True"];
+arr12965092864 -> kernel5:in_2
+subgraph cluster0 {
+	style="rounded,filled";
+	fillcolor="#0072B922";
+	pencolor="#0072B9";
+	label=<<b>repeated 20x</b>>;
+
+	kernel6 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">	
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>solve_constraints_local_kernel</b></TD></TR>	
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec4i"><font color="black">topo</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_1" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">x_old</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_2" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.mat33f"><font color="black">Dm_inv_all</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_3" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">b_inv</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_4" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec2f"><font color="black">lambda_old</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_5" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">gamma_</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_6" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.mat22f"><font color="black">compliance</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_7" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vector.<locals>.vec_t"><font color="black">delta_x_local</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_8" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec2f"><font color="black">delta_lambda_local</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_9" BGCOLOR="#BBBBBB" align="left" title="dtype=warp._src.types.float32"><font color="black">eps</font></TD><TD BORDER="0"></TD></TR>	
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;ConstraintSolver.py:265 (solve_all_constraints_local)"];
+	arr12965092864 -> kernel6:in_1
+	arr12946035712 [label="lambda_old",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array lambda_old / ptr=12946035712, shape=(1273,), dtype=warp._src.types.vec2f, requires_grad=True"];
+	arr12946035712 -> kernel6:in_4
+	arr12956153856 [label="delta_x_local",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array delta_x_local / ptr=12956153856, shape=(1273,), dtype=warp._src.types.vector.<locals>.vec_t, requires_grad=True"];
+	arr12956153856 -> kernel6:in_7
+	arr12942921728 [label="delta_lambda_local",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array delta_lambda_local / ptr=12942921728, shape=(1273,), dtype=warp._src.types.vec2f, requires_grad=True"];
+	arr12942921728 -> kernel6:in_8
+	kernel7 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">	
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>gather_next_x_from_local_kernel</b></TD></TR>	
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">x_prev</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_1" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.int32"><font color="black">vertex_tet_offsets</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_2" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.int32"><font color="black">vertex_tet_ids</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_3" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.int32"><font color="black">vertex_local_slot</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_4" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.int32"><font color="black">vertex_count</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_5" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vector.<locals>.vec_t"><font color="black">delta_x_local</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_6" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">x_next</font></TD><TD BORDER="0"></TD></TR>	
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;DiffXPBD.py:800 (accumulate_global_local_updates_tape)"];
+	arr12965092864 -> kernel7:in_0
+	arr12956153856 -> kernel7:in_5
+	arr12965092864 -> kernel7:in_6
+	kernel8 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">	
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>update_lambda_from_local_kernel</b></TD></TR>	
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec2f"><font color="black">lambda_prev</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_1" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec2f"><font color="black">delta_lambda_local</font></TD><TD BORDER="0"></TD></TR>	
+<TR><TD PORT="in_2" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec2f"><font color="black">lambda_next</font></TD><TD BORDER="0"></TD></TR>	
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;DiffXPBD.py:814 (accumulate_global_local_updates_tape)"];
+	arr12946035712 -> kernel8:in_0
+	arr12942921728 -> kernel8:in_1
+	arr12946035712 -> kernel8:in_2
+};
+
+kernel9 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>keypoints_update</b></TD></TR>
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">x_state</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_1" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec4i"><font color="black">topo</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_2" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.int32"><font color="black">keypoints_tet</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_3" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec4f"><font color="black">keypoints_barycentric</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_4" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">keypoints_pos</font></TD><TD BORDER="0"></TD></TR>
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;DiffXPBD.py:822 (update_keypoints_tape)"];
+arr12918755840 [label="keypoints_tet",shape=ellipse,style=filled,fillcolor="lightgray",tooltip="Array keypoints_tet / ptr=12918755840, shape=(15,), dtype=warp._src.types.int32, requires_grad=False"];
+arr12918755840 -> kernel9:in_2
+arr12918756352 [label="keypoints_barycentric",shape=ellipse,style=filled,fillcolor="lightgray",tooltip="Array keypoints_barycentric / ptr=12918756352, shape=(15,), dtype=warp._src.types.vec4f, requires_grad=False"];
+arr12918756352 -> kernel9:in_3
+arr12942999552 [label="keypoints_pos",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array keypoints_pos / ptr=12942999552, shape=(15,), dtype=warp._src.types.vec3f, requires_grad=True"];
+arr12942999552 -> kernel9:in_4
+kernel10 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>clear_scalar_kernel</b></TD></TR>
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">arr</font></TD><TD BORDER="0"></TD></TR>
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;DiffXPBD.py:830 (clear_loss)"];
+arr12929229824 [label="loss",shape=ellipse,style=filled,fillcolor="#76B900",tooltip="Array loss / ptr=12929229824, shape=(1,), dtype=warp._src.types.float32, requires_grad=True"];
+arr12929229824 -> kernel10:in_0
+kernel11 [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" border="0" cellspacing="2" cellpadding="4" bgcolor="#888888" gradientangle="0">
+<TR><TD BGCOLOR="#ffffffaa" colspan="2" align="center"><b>compute_kps_loss_kernel</b></TD></TR>
+<TR><TD PORT="in_0" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">kps_final</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_1" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.vec3f"><font color="black">kps_target</font></TD><TD BORDER="0"></TD></TR>
+<TR><TD PORT="in_2" BGCOLOR="#BBBBBB" align="left" title="array: dtype=warp._src.types.float32"><font color="black">loss</font></TD><TD BORDER="0"></TD></TR>
+</TABLE>>,tooltip="&#47;home&#47;erie_lab&#47;Documents&#47;kxz365&#47;Github_repos&#47;3D-DiffXPBD-Warp&#47;utils&#47;DiffXPBD.py:845 (accumulate_kps_loss)"];
+arr12942999552 -> kernel11:in_0
+arr12936118272 [label="kps_target",shape=ellipse,style=filled,fillcolor="lightgray",tooltip="Array kps_target / ptr=12936118272, shape=(15,), dtype=warp._src.types.vec3f, requires_grad=False"];
+arr12936118272 -> kernel11:in_1
+arr12929229824 -> kernel11:in_2
+}

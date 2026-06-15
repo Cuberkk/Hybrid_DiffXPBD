@@ -1,0 +1,18 @@
+{
+    "total_time": 100.0,
+    "optimize_subject": [
+        "Damping_Amplification",
+        "Youngs_Modulus"
+    ],
+    "lr": [
+        0.2,
+        0.01
+    ],
+    "optimized_method": "alternating",
+    "alternating_epochs": 100,
+    "max_epochs": 1000,
+    "stop_condition": "both",
+    "convergence_patience": 10,
+    "relative_change_threshold": 0.001,
+    "avg_loss_eps": 1.0
+}
