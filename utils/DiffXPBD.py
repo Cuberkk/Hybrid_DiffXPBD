@@ -27,6 +27,45 @@ wp.config.verify_autograd_array_access = True
 # Computation Kernels
 # =========================================================
 @wp.kernel
+def clear_mat22_kernel(arr: wp.array(dtype=wp.mat22)):
+    i = wp.tid()
+    arr[i] = wp.mat22(0.0, 0.0, 0.0, 0.0)
+
+@wp.kernel
+def clear_vec3_kernel(arr: wp.array(dtype=wp.vec3)):
+    i = wp.tid()
+    arr[i] = wp.vec3(0.0, 0.0, 0.0)
+
+
+@wp.kernel
+def clear_vec2_kernel(arr: wp.array(dtype=wp.vec2)):
+    i = wp.tid()
+    arr[i] = wp.vec2(0.0, 0.0)
+
+
+@wp.kernel
+def clear_vec12_kernel(arr: wp.array(dtype=vec12)):
+    i = wp.tid()
+    arr[i] = vec12()
+
+
+@wp.kernel
+def clear_scalar_kernel(arr: wp.array(dtype=wp.float32)):
+    i = wp.tid()
+    arr[i] = 0.0
+
+@wp.kernel
+def copy_vec3_kernel(src: wp.array(dtype=wp.vec3), dst: wp.array(dtype=wp.vec3)):
+    i = wp.tid()
+    dst[i] = src[i]
+
+
+@wp.kernel
+def copy_vec2_kernel(src: wp.array(dtype=wp.vec2), dst: wp.array(dtype=wp.vec2)):
+    i = wp.tid()
+    dst[i] = src[i]
+
+@wp.kernel
 def fill_gravity_kernel(
     out_force: wp.array(dtype=wp.vec3),
     gx: float,
@@ -62,25 +101,27 @@ def update_gamma_from_youngs_kernel(
 
 
 @wp.kernel
-def update_b_inv_from_youngs_kernel(
+def update_k_inv_from_youngs_kernel(
     youngs: wp.array(dtype=wp.float32),
     fixed_mask: wp.array(dtype=wp.int32),
-    b_inv: wp.array(dtype=wp.float32),
+    k_inv: wp.array(dtype=wp.float32),
     poisson_ratio: float,
     dt: float,
     avg_edge: float,
     selected_vid: int,
     b_amp: wp.array(dtype=wp.float32),
+    mass_vertex: wp.array(dtype=wp.float32)
 ):
     v = wp.tid()
     E = youngs[0]
     nu = poisson_ratio
     damping = (4.0 * dt * E * b_amp[0]) / ((1.0 + nu) * avg_edge * avg_edge)
+    k = damping * dt + mass_vertex[v]
 
     if fixed_mask[v] == 1 or v == selected_vid:
-        b_inv[v] = 1.0e-8
+        k_inv[v] = 1.0e-8
     else:
-        b_inv[v] = 1.0 / damping
+        k_inv[v] = 1.0 / k
 
 
 @wp.kernel
@@ -99,38 +140,9 @@ def update_compliance_from_youngs_kernel(
     lambda_lame = (E * nu) / ((1.0 + nu) * (1.0 - 2.0 * nu))
     mu_lame = E / (2.0 * (1.0 + nu))
 
-    Hc = (1.0 / (lambda_lame * tet_volume[t] * dt)) * compliance_modulation
-    Dc = (1.0 / (mu_lame * tet_volume[t] * dt)) * compliance_modulation
+    Hc = (1.0 / (lambda_lame * tet_volume[t] * dt * dt)) * compliance_modulation
+    Dc = (1.0 / (mu_lame * tet_volume[t] * dt * dt)) * compliance_modulation
     compliance[t] = wp.mat22(Hc, 0.0, 0.0, Dc)
-
-@wp.kernel
-def clear_mat22_kernel(arr: wp.array(dtype=wp.mat22)):
-    i = wp.tid()
-    arr[i] = wp.mat22(0.0, 0.0, 0.0, 0.0)
-
-@wp.kernel
-def clear_vec3_kernel(arr: wp.array(dtype=wp.vec3)):
-    i = wp.tid()
-    arr[i] = wp.vec3(0.0, 0.0, 0.0)
-
-
-@wp.kernel
-def clear_vec2_kernel(arr: wp.array(dtype=wp.vec2)):
-    i = wp.tid()
-    arr[i] = wp.vec2(0.0, 0.0)
-
-
-@wp.kernel
-def clear_vec12_kernel(arr: wp.array(dtype=vec12)):
-    i = wp.tid()
-    arr[i] = vec12()
-
-
-@wp.kernel
-def clear_scalar_kernel(arr: wp.array(dtype=wp.float32)):
-    i = wp.tid()
-    arr[i] = 0.0
-
 
 @wp.kernel
 def update_external_force_kernel(
@@ -148,14 +160,16 @@ def update_external_force_kernel(
 
 
 @wp.kernel
-def update_external_part_from_b_inv_kernel(
+def update_external_part_from_k_inv_kernel(
     external_force: wp.array(dtype=wp.vec3),
-    b_inv: wp.array(dtype=wp.float32),
+    k_inv: wp.array(dtype=wp.float32),
     external_part: wp.array(dtype=wp.vec3),
     dt: float,
+    mass_vertex: wp.array(dtype=wp.float32),
+    velocity: wp.array(dtype=wp.vec3),
 ):
     i = wp.tid()
-    external_part[i] = external_force[i] * (dt * b_inv[i])
+    external_part[i] = k_inv[i] * (mass_vertex[i] * dt * velocity[i] + external_force[i] * dt * dt)
 
 
 @wp.kernel
@@ -175,18 +189,6 @@ def predictor_step_tape_kernel(
 ):
     i = wp.tid()
     x_stage0[i] = x_state[i] + external_part[i]
-
-
-@wp.kernel
-def copy_vec3_kernel(src: wp.array(dtype=wp.vec3), dst: wp.array(dtype=wp.vec3)):
-    i = wp.tid()
-    dst[i] = src[i]
-
-
-@wp.kernel
-def copy_vec2_kernel(src: wp.array(dtype=wp.vec2), dst: wp.array(dtype=wp.vec2)):
-    i = wp.tid()
-    dst[i] = src[i]
 
 
 @wp.kernel
@@ -250,6 +252,16 @@ def gather_next_x_from_local_kernel(
         accum = accum + wp.vec3(dx[base + 0], dx[base + 1], dx[base + 2]) * inv_count
 
     x_next[v] = accum
+
+
+@wp.kernel
+def calculate_velocity(velocity: wp.array(dtype=wp.vec3), 
+                       x_prev: wp.array(dtype=wp.vec3), 
+                       x_curr: wp.array(dtype=wp.vec3), 
+                       dt: float):
+    i = wp.tid()
+    velocity[i] = (x_curr[i] - x_prev[i]) / dt
+
 
 @wp.kernel
 def gather_elastic_force_from_local_kernel(
@@ -353,6 +365,7 @@ class DiffXPBDTapeFramework3D_Warp:
         youngs_init: float = 10 * 1e6,
         force_amplification: float = 1.e0,
         damping_amplification: float = 0.1,
+        mass_amplification: float = 1.0,
         sweep_count: int = 20,
 
         position_effector_path: str = None,
@@ -403,7 +416,8 @@ class DiffXPBDTapeFramework3D_Warp:
 
         self.dt = float(dt)
         self.gravity_vec = np.asarray(gravity_vec, dtype=np.float32) * self.acceleration_modulation
-        self.mass_total = float(mass_total)
+        self.mass_amplification = float(mass_amplification)
+        self.mass_total = float(mass_total) * self.mass_amplification
         self.poisson_ratio = float(poisson_ratio)
         self.compliance_modulation = float(compliance_modulation)
         self.sweep_count = int(sweep_count)
@@ -414,6 +428,10 @@ class DiffXPBDTapeFramework3D_Warp:
         self.mesh.load_gmsh(mesh_path, target_unit=target_unit)
         self.boundary_indices = self.mesh.get_oriented_boundary_faces_numpy().astype(np.int32)
         self.gripper_edge_indices = self.mesh.E_np.reshape(-1).astype(np.int32)
+
+        self.mass_per_vertex = self.mass_total / float(self.mesh.nv)
+        self.mass_vertex_np = np.full(self.mesh.nv, self.mass_per_vertex, dtype=np.float32)
+        self.mass_per_vertex_field = wp.array(self.mass_vertex_np, dtype=wp.float32, device=self.device, requires_grad=True)
 
         self.pc = PropertyCalculator3D_Warp(
             self.mesh,
@@ -496,14 +514,16 @@ class DiffXPBDTapeFramework3D_Warp:
         self.gamma = wp.zeros(1, dtype=wp.float32, device=self.device, requires_grad=True)
         self.loss = wp.zeros(1, dtype=wp.float32, device=self.device, requires_grad=True)
 
-        self.b_inv = wp.zeros(self.mesh.nv, dtype=wp.float32, device=self.device, requires_grad=True)
+        self.k_inv = wp.zeros(self.mesh.nv, dtype=wp.float32, device=self.device, requires_grad=True)
         self.compliance = wp.zeros(self.mesh.nt, dtype=wp.mat22, device=self.device, requires_grad=True)
 
         self.gravity_vec_field = wp.zeros(self.mesh.nv, dtype=wp.vec3, device=self.device)
         self.external_force = wp.zeros(self.mesh.nv, dtype=wp.vec3, device=self.device, requires_grad=True)
         self.external_part = wp.zeros(self.mesh.nv, dtype=wp.vec3, device=self.device, requires_grad=True)
 
-        self.x_state = wp.clone(self.mesh.X)
+        self.x_state_prev = wp.clone(self.mesh.X)
+        self.x_state_curr = wp.clone(self.mesh.X)
+        self.x_velocity = wp.zeros_like(self.mesh.X)
         self.x_np = None
         self.lambda_state = wp.zeros(self.mesh.nt, dtype=wp.vec2, device=self.device)
 
@@ -657,11 +677,19 @@ class DiffXPBDTapeFramework3D_Warp:
                   inputs=[self.youngs, gamma, self.poisson_ratio], 
                   device=self.device)
 
-    def update_b_inv_from_youngs(self, b_inv, damping_amp):
+    def update_k_inv_from_youngs(self, k_inv, damping_amp, mass_vertex):
         wp.launch(
-            update_b_inv_from_youngs_kernel,
+            update_k_inv_from_youngs_kernel,
             dim=self.mesh.nv,
-            inputs=[self.youngs, self.fixed_mask, b_inv, self.poisson_ratio, self.dt, float(self.avg_edge), int(self.selected_vid), damping_amp],
+            inputs=[self.youngs, 
+                    self.fixed_mask, 
+                    k_inv, 
+                    self.poisson_ratio, 
+                    self.dt, 
+                    float(self.avg_edge), 
+                    int(self.selected_vid), 
+                    damping_amp,
+                    mass_vertex],
             device=self.device,
         )
 
@@ -681,23 +709,37 @@ class DiffXPBDTapeFramework3D_Warp:
             device=self.device,
         )
 
-    def update_external_part_from_youngs(self, external_force, b_inv, external_part):
+    def update_external_part_from_youngs(self, external_force, k_inv, external_part, mass_vertex, velocity):
         wp.launch(
-            update_external_part_from_b_inv_kernel,
+            update_external_part_from_k_inv_kernel,
             dim=self.mesh.nv,
-            inputs=[external_force, b_inv, external_part, self.dt],
+            inputs=[external_force, 
+                    k_inv, 
+                    external_part, 
+                    self.dt,
+                    mass_vertex,
+                    velocity
+                    ],
             device=self.device,
         )
 
     def calculate_local_elastic_force(self, gamma, compliance):
         self.solver.solve_elastic_force(
             topo=self.mesh.Topo,
-            x_old=self.x_state,
+            x_old=self.x_state_curr,
             Dm_inv_all=self.pc.Dm_inv,
             gamma_=gamma,
             compliance=compliance,
             compliance_modulation=self.compliance_modulation,
             local_elastic_force=self.local_elastic_force,
+        )
+
+    def calculate_current_velocity(self, velocity, x_prev, x_curr):
+        wp.launch(
+            calculate_velocity,
+            dim=self.mesh.nv,
+            inputs=[velocity, x_prev, x_curr, self.dt],
+            device=self.device,
         )
 
     def calculate_global_elastic_force_wp(self,):
@@ -739,14 +781,14 @@ class DiffXPBDTapeFramework3D_Warp:
         wp.launch(clear_vec2_kernel, dim=self.mesh.nt, inputs=[self.delta_lambda_local], device=self.device)
 
     def predictor_step_gui(self):
-        wp.launch(predictor_step_forward_kernel, dim=self.mesh.nv, inputs=[self.x_state, self.external_part], device=self.device)
+        wp.launch(predictor_step_forward_kernel, dim=self.mesh.nv, inputs=[self.x_state_curr, self.external_part], device=self.device)
 
     def solve_all_constraints_gui(self):
         self.solver.solve_all_constraints_local(
             topo=self.mesh.Topo,
-            x_old=self.x_state,
+            x_old=self.x_state_curr,
             Dm_inv_all=self.pc.Dm_inv,
-            b_inv=self.b_inv,
+            k_inv=self.k_inv,
             lambda_old=self.lambda_state,
             gamma_=self.gamma,
             compliance=self.compliance,
@@ -762,7 +804,7 @@ class DiffXPBDTapeFramework3D_Warp:
         wp.launch(
             accumulate_global_local_updates_forward_kernel,
             dim=self.mesh.nt,
-            inputs=[self.mesh.Topo, self.pc.vertex_count, self.delta_x_local, self.x_state],
+            inputs=[self.mesh.Topo, self.pc.vertex_count, self.delta_x_local, self.x_state_curr],
             device=self.device,
         )
 
@@ -770,11 +812,37 @@ class DiffXPBDTapeFramework3D_Warp:
         wp.launch(
             keypoints_update,
             dim=self.keypointmapper.kp_num,
-            inputs=[self.x_state, self.mesh.Topo, self.keypointmapper.keypoints_tet_wp, self.keypointmapper.keypoints_barycentric_wp, self.keypoints_pos],
+            inputs=[self.x_state_curr, self.mesh.Topo, self.keypointmapper.keypoints_tet_wp, self.keypointmapper.keypoints_barycentric_wp, self.keypoints_pos],
+            device=self.device,
+        )
+
+    def clear_loss(self):
+        wp.launch(clear_scalar_kernel, dim=1, inputs=[self.loss], device=self.device)
+
+    def accumulate_loss_all_pts_gui(self, step: int):
+        if self.target_trajectory is None:
+            raise RuntimeError("x_target is not initialized. Pass target_npz to the constructor.")
+        wp.launch(
+            compute_loss_all_pts_kernel,
+            dim=self.mesh.nv,
+            inputs=[self.x_state_curr, self.target_trajectory[step], self.loss],
+            device=self.device,
+        )
+
+    def accumulate_kps_loss(self, step: int, keypoints_pos):
+        if self.target_trajectory is None:
+            raise RuntimeError("x_target is not initialized. Pass target_npz to the constructor.")
+        wp.launch(
+            compute_kps_loss_kernel,
+            dim=self.keypointmapper.kp_num,
+            inputs=[keypoints_pos, self.target_trajectory[step], self.loss],
             device=self.device,
         )
 
     def one_forward_step(self, step: int):
+        ## Store previous state
+        wp.copy(self.x_state_prev, self.x_state_curr)
+
         self.free_node_elastic_force.zero_()
         self.fix_node_elastic_force.zero_()
         self.total_node_elastic_force.zero_()
@@ -788,10 +856,10 @@ class DiffXPBDTapeFramework3D_Warp:
         self.applied_force_amp = wp.array([self.series_force_amp_np], dtype=wp.float32, device=self.device, requires_grad=False)
 
         self.update_gamma_from_youngs(self.gamma)
-        self.update_b_inv_from_youngs(self.b_inv, self.damping_amp)
+        self.update_k_inv_from_youngs(self.k_inv, self.damping_amp, self.mass_per_vertex_field)
         self.update_compliance_from_youngs(self.compliance)
         self.update_external_force(self.external_force, self.applied_force_field, self.applied_force_amp)
-        self.update_external_part_from_youngs(self.external_force, self.b_inv, self.external_part)
+        self.update_external_part_from_youngs(self.external_force, self.k_inv, self.external_part, self.mass_per_vertex_field, self.x_velocity)
         self.predictor_step_gui()
         self.reset_lambda_states()
 
@@ -799,9 +867,23 @@ class DiffXPBDTapeFramework3D_Warp:
             self.clear_new_state()
             self.solve_all_constraints_gui()
 
+        self.calculate_current_velocity(self.x_velocity, self.x_state_prev, self.x_state_curr)
         self.update_keypoints_gui()
+
+        if self.target_trajectory is not None:
+            self.clear_loss()
+            if step >= len(self.target_trajectory):
+                step = -1
+            if self.trajctory_type == "kps":
+                self.accumulate_kps_loss(step, self.keypoints_pos)
+            else:
+                self.accumulate_loss_all_pts_gui(step)
+
         self.calculate_local_elastic_force(self.gamma, self.compliance)
         self.calculate_global_elastic_force_wp()
+
+        loss = float(self.loss.numpy()[0])
+        return loss
 
     # -----------------------------------------------------
     # tape path
@@ -817,7 +899,7 @@ class DiffXPBDTapeFramework3D_Warp:
         wp.launch(
             predictor_step_tape_kernel,
             dim=self.mesh.nv,
-            inputs=[self.x_state, external_part, x_tape[0]],
+            inputs=[self.x_state_curr, external_part, x_tape[0]],
             device=self.device,
         )
 
@@ -826,7 +908,7 @@ class DiffXPBDTapeFramework3D_Warp:
             topo=self.mesh.Topo,
             x_old=x_tape[stage],
             Dm_inv_all=self.pc.Dm_inv,
-            b_inv=b_inv,
+            k_inv=b_inv,
             lambda_old=lambda_tape[stage],
             gamma_=gamma,
             compliance=compliance,
@@ -864,9 +946,6 @@ class DiffXPBDTapeFramework3D_Warp:
             device=self.device,
         )
 
-    def clear_loss(self):
-        wp.launch(clear_scalar_kernel, dim=1, inputs=[self.loss], device=self.device)
-
     def accumulate_loss_all_pts(self, stage: int, step: int):
         if self.target_trajectory is None:
             raise RuntimeError("x_target is not initialized. Pass target_npz to the constructor.")
@@ -874,16 +953,6 @@ class DiffXPBDTapeFramework3D_Warp:
             compute_loss_all_pts_kernel,
             dim=self.mesh.nv,
             inputs=[self.x_tape[stage], self.target_trajectory[step], self.loss],
-            device=self.device,
-        )
-
-    def accumulate_kps_loss(self, step: int, keypoints_pos):
-        if self.target_trajectory is None:
-            raise RuntimeError("x_target is not initialized. Pass target_npz to the constructor.")
-        wp.launch(
-            compute_kps_loss_kernel,
-            dim=self.keypointmapper.kp_num,
-            inputs=[keypoints_pos, self.target_trajectory[step], self.loss],
             device=self.device,
         )
 
@@ -909,6 +978,7 @@ class DiffXPBDTapeFramework3D_Warp:
         delta_lambda_local_tape = [wp.zeros(self.mesh.nt, dtype=wp.vec2, device=self.device, requires_grad=True) for _ in range(self.sweep_count)]
         gamma = wp.zeros(1, dtype=wp.float32, device=self.device, requires_grad=True)
         b_inv = wp.zeros(self.mesh.nv, dtype=wp.float32, device=self.device, requires_grad=True)
+        mass_vertex = wp.array([self.mass_per_vertex], dtype=wp.float32, device=self.device, requires_grad=True)
         compliance = wp.zeros(self.mesh.nt, dtype=wp.mat22, device=self.device, requires_grad=True)
 
         applied_force_amp = wp.array([self.series_force_amp_np], dtype=wp.float32, device=self.device, requires_grad=True)
@@ -918,7 +988,7 @@ class DiffXPBDTapeFramework3D_Warp:
         with tape:
             self.update_youngs_from_log(self.youngs_log, self.youngs)
             self.update_gamma_from_youngs(gamma)
-            self.update_b_inv_from_youngs(b_inv, self.damping_amp)
+            self.update_k_inv_from_youngs(b_inv, self.damping_amp, mass_vertex)
             self.update_compliance_from_youngs(compliance)
             self.update_external_force(external_force, self.applied_force_field, applied_force_amp)
             self.update_external_part_from_youngs(external_force, b_inv, external_part)
@@ -951,7 +1021,8 @@ class DiffXPBDTapeFramework3D_Warp:
 
         loss = float(self.loss.numpy()[0])
 
-        wp.copy(self.x_state, self.x_tape[-1])
+        wp.copy(self.x_state_prev, self.x_state_curr)
+        wp.copy(self.x_state_curr, self.x_tape[-1])
         wp.copy(self.keypoints_pos, keypoints_pos)
         self.youngs_np = float(self.youngs.numpy()[0])
 
@@ -963,7 +1034,7 @@ class DiffXPBDTapeFramework3D_Warp:
     # utility
     # -----------------------------------------------------
     def copy_state_to_numpy(self):
-        return self.x_state.numpy()
+        return self.x_state_curr.numpy()
 
     def reset_to_rest(self):
         self.loss_hist = []
@@ -971,7 +1042,7 @@ class DiffXPBDTapeFramework3D_Warp:
         self.grad_F_hist = []
         self.grad_F_amp_hist = []
         self.grad_damping_amp_hist = []
-        wp.copy(self.x_state, self.mesh.X)
+        wp.copy(self.x_state_curr, self.mesh.X)
         wp.launch(clear_vec2_kernel, dim=self.mesh.nt, inputs=[self.lambda_state], device=self.device)
 
     # -----------------------------------------------------
@@ -988,7 +1059,7 @@ class DiffXPBDTapeFramework3D_Warp:
             fps = int(1.0 / (self.dt))
 
         self.opengl_renderer = warp.render.OpenGLRenderer(
-            title = "1st-order XPBD",
+            title = "Hybrid XPBD",
             fps=fps,
             screen_width=screen_width,
             screen_height=screen_height,
@@ -1045,7 +1116,7 @@ class DiffXPBDTapeFramework3D_Warp:
             self.force_instancer = ShapeInstancer(self.opengl_renderer._shape_shader, wp.get_preferred_device())
             self.force_instancer.register_shape(vertices, indices)
             self.force_instancer.allocate_instances(
-                positions=[tuple(self.x_state.numpy()[vid]) for vid in self.applied_idx_np],
+                positions=[tuple(self.x_state_curr.numpy()[vid]) for vid in self.applied_idx_np],
                 rotations=[self.quat_from_arrow_to_force(self.applied_force_field.numpy()[0]) for _ in range(len(self.applied_idx_np))],
                 colors1=[(1.0, 0.0, 0.0) for _ in range(len(self.applied_idx_np))],
                 colors2=[(1.0, 0.0, 0.0) for _ in range(len(self.applied_idx_np))],
@@ -1059,7 +1130,7 @@ class DiffXPBDTapeFramework3D_Warp:
         if self.opengl_renderer is None:
             raise RuntimeError("OpenGL renderer is not initialized. Call init_opengl_renderer() first.")
 
-        points = self.x_state.numpy()
+        points = self.x_state_curr.numpy()
         # time_in_seconds = float(self.frame_id) / float(self.opengl_renderer.fps)
         
         self.update_render_force_arrows()
@@ -1166,9 +1237,10 @@ class DiffXPBDTapeFramework3D_Warp:
                 self.grad_F_amp_hist.append(grad_F_amp)
                 self.grad_damping_amp_hist.append(grad_damping_amp)
             else:
-                self.one_forward_step(step = self.step)
+                loss = self.one_forward_step(step = self.step)
+                self.loss_hist.append(loss)
                 if save_frames:
-                    self.x_hist.append(self.x_state.numpy())
+                    self.x_hist.append(self.x_state_curr.numpy())
                     self.kps_hist.append(self.keypoints_pos.numpy())
             self.applied_force_np = self.applied_force_field.numpy()[0] * max(len(self.applied_idx), 1) / self.force_modulation
 
@@ -1215,7 +1287,7 @@ class DiffXPBDTapeFramework3D_Warp:
             scales = np.linalg.norm(self.applied_force_field.numpy()[0])/(500 * self.series_force_amp_np)
             scales_tuple = tuple([scales for _ in range(3)])
             self.force_instancer.allocate_instances(
-                positions=[tuple(self.x_state.numpy()[vid]) for vid in self.applied_idx_np],
+                positions=[tuple(self.x_state_curr.numpy()[vid]) for vid in self.applied_idx_np],
                 rotations=[self.quat_from_arrow_to_force(self.applied_force_field.numpy()[0]) for _ in range(len(self.applied_idx_np))],
                 colors1=[(1.0, 0.0, 0.0) for _ in range(len(self.applied_idx_np))],
                 colors2=[(1.0, 0.0, 0.0) for _ in range(len(self.applied_idx_np))],
@@ -1352,12 +1424,13 @@ class DiffXPBDTapeFramework3D_Warp:
         self.my_label.text += f"\nF_fix_elastic: ({self.total_fix_node_force[0]:.2e}, {self.total_fix_node_force[1]:.2e}, {self.total_fix_node_force[2]:.2e})"
         self.my_label.text += f"\nF_total_elastic: ({self.total_node_force[0]:.2e}, {self.total_node_force[1]:.2e}, {self.total_node_force[2]:.2e})"
         self.my_label.text += f"\nF_applied: ({self.applied_node_force[0]:.2e}, {self.applied_node_force[1]:.2e}, {self.applied_node_force[2]:.2e})"
+        if self.target_trajectory is not None:
+                        self.my_label.text += f"\n\nLoss ({self._sign_justification(np.sum(self.loss_hist))}):\nCurrent: {self.loss_hist[-1]:.2e},\nAverage: {np.mean(self.loss_hist):.2e}\nTotal: {np.sum(self.loss_hist):.2e}\n"
         if self.gradient_mode:
             total_grad_F = np.array(self.grad_F_hist).reshape(-1, 3).sum(axis=0)
-            self.my_label.text += f"\n\nLoss ({self._sign_justification(np.sum(self.loss_hist))}):\nCurrent Loss: {self.loss_hist[-1]:.2e},\nAverage: {np.mean(self.loss_hist):.2e}\nTotal Loss: {np.sum(self.loss_hist):.2e}\n"
-            self.my_label.text += f"\nYoungs Modulus Log Gradient ({self._sign_justification(np.sum(self.grad_E_log_hist))}):\nCurrent Grad E_log: {self.grad_E_log_hist[-1]:.2e},\nTotal Grad E_log: {np.sum(self.grad_E_log_hist):.2e}\n"
-            self.my_label.text += f"\nForce Amplification Gradient ({self._sign_justification(np.sum(self.grad_F_amp_hist))}):\nCurrent Grad F Amp: {self.grad_F_amp_hist[-1]:.2e},\nTotal Grad F Amp: {np.sum(self.grad_F_amp_hist):.2e}\n"
-            self.my_label.text += f"\nDamping Amplification Gradient ({self._sign_justification(np.sum(self.grad_damping_amp_hist))}):\nCurrent Grad Damping Amp: {self.grad_damping_amp_hist[-1]:.2e},\nTotal Grad Damping Amp: {np.sum(self.grad_damping_amp_hist):.2e}"
+            self.my_label.text += f"\nYoungs Modulus Log Gradient ({self._sign_justification(np.sum(self.grad_E_log_hist))}):\nCurrent: {self.grad_E_log_hist[-1]:.2e},\nTotal: {np.sum(self.grad_E_log_hist):.2e}\n"
+            self.my_label.text += f"\nForce Amplification Gradient ({self._sign_justification(np.sum(self.grad_F_amp_hist))}):\nCurrent: {self.grad_F_amp_hist[-1]:.2e},\nTotal: {np.sum(self.grad_F_amp_hist):.2e}\n"
+            self.my_label.text += f"\nDamping Amplification Gradient ({self._sign_justification(np.sum(self.grad_damping_amp_hist))}):\nCurrent: {self.grad_damping_amp_hist[-1]:.2e},\nTotal: {np.sum(self.grad_damping_amp_hist):.2e}"
             # self.my_label.text += f"\nCurrent Grad F: ({self.grad_F_hist[-1][0]:.2e}, {self.grad_F_hist[-1][1]:.2e}, {self.grad_F_hist[-1][2]:.2e})\nTotal Grad F: ({total_grad_F[0]:.2e}, {total_grad_F[1]:.2e}, {total_grad_F[2]:.2e})"
         self.my_label.x = 10
         self.my_label.y = self.opengl_renderer._info_label.y - self.opengl_renderer._info_label.content_height - 5
@@ -1372,7 +1445,7 @@ class DiffXPBDTapeFramework3D_Warp:
                                                  self.camera_up, self.aspect, self.opengl_renderer.camera_fov)
         self.selected_vid = self._pick_vertex_from_ray(self.ray_o, self.ray_d)
         if self.selected_vid >=0:
-            x_curr = self.x_state.numpy()[self.selected_vid].astype(np.float32)
+            x_curr = self.x_state_curr.numpy()[self.selected_vid].astype(np.float32)
             self.drag_plane_point = x_curr.copy()
             forward = self._normalize_np(self.camera_look_at - self.camera_pos)
             self.drag_plane_normal = forward.copy()
@@ -1389,7 +1462,7 @@ class DiffXPBDTapeFramework3D_Warp:
             if hit is not None:
                 wp.launch(set_single_vertex_position,
                         dim=1,
-                        inputs=[self.x_state, int(self.selected_vid), float(hit[0]), float(hit[1]), float(hit[2])],
+                        inputs=[self.x_state_curr, int(self.selected_vid), float(hit[0]), float(hit[1]), float(hit[2])],
                         device=self.device,)
 
     def _my_mouse_release(self, x, y, button, modifiers):
@@ -1452,7 +1525,7 @@ class DiffXPBDTapeFramework3D_Warp:
         best_dist2 = float("inf")
         r2 = pick_radius * pick_radius
 
-        self.x_np = self.x_state.numpy()
+        self.x_np = self.x_state_curr.numpy()
         for vid in range(self.mesh.nv):
             if self.non_draggable_mask_np[vid]:
                 continue
@@ -1510,7 +1583,7 @@ class DiffXPBDTapeFramework3D_Warp:
             scaling=float(scaling),
         )
 
-        points = self.x_state.numpy()
+        points = self.x_state_curr.numpy()
         self.usd_renderer.begin_frame(0.0)
         self.usd_renderer.render_mesh(
             name=self.usd_mesh_name,
@@ -1536,7 +1609,7 @@ class DiffXPBDTapeFramework3D_Warp:
         if self.usd_renderer is None:
             raise RuntimeError("USD renderer is not initialized. Call init_usd_renderer() first.")
 
-        points = self.x_state.numpy() if x_override is None else x_override
+        points = self.x_state_curr.numpy() if x_override is None else x_override
 
         time_in_seconds = float(frame_index) / float(self.usd_renderer.fps)
         self.usd_renderer.begin_frame(time_in_seconds)

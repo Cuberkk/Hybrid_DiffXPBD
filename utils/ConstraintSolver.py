@@ -113,7 +113,7 @@ def solve_constraints_local_kernel(
     topo: wp.array(dtype=vec4i),              # (nt,)
     x_old: wp.array(dtype=vec3f),             # (nv,)
     Dm_inv_all: wp.array(dtype=mat33),        # (nt,)
-    b_inv: wp.array(dtype=wp.float32),        # (nv,)
+    k_inv: wp.array(dtype=wp.float32),        # (nv,)
     lambda_old: wp.array(dtype=vec2f),        # (nt,)
     gamma_: wp.array(dtype=wp.float32),       # shape (1,)
     compliance: wp.array(dtype=mat22),        # (nt,)
@@ -151,10 +151,10 @@ def solve_constraints_local_kernel(
     dCH = gradient_neo_hookean_H(F, J, Dm_inv)
     dCD = gradient_neo_hookean_D(F, Dm_inv)
 
-    b0 = b_inv[id0]
-    b1 = b_inv[id1]
-    b2 = b_inv[id2]
-    b3 = b_inv[id3]
+    b0 = k_inv[id0]
+    b1 = k_inv[id1]
+    b2 = k_inv[id2]
+    b3 = k_inv[id3]
 
     A00 = local_quad_form(dCH, dCH, b0, b1, b2, b3) + H_compliance
     A01 = local_quad_form(dCH, dCD, b0, b1, b2, b3)
@@ -215,8 +215,8 @@ def solve_local_elastic_force(
     H_compliance = compliance[i][0, 0]
     D_compliance = compliance[i][1, 1]
 
-    H_alpha_inv = 1.0 / (H_compliance * dt / compliance_modulation)
-    D_alpha_inv = 1.0 / (D_compliance * dt / compliance_modulation)
+    H_alpha_inv = 1.0 / (H_compliance * dt * dt / compliance_modulation)
+    D_alpha_inv = 1.0 / (D_compliance * dt * dt / compliance_modulation)
 
     constraint_H = J - gamma_[0]
     constraint_D = wp.sqrt(wp.trace(wp.transpose(F) * F)) - wp.sqrt(3.0)
@@ -258,7 +258,7 @@ class EnergyConstraintSolver3D_Warp:
         topo,
         x_old,
         Dm_inv_all,
-        b_inv,
+        k_inv,
         lambda_old,
         gamma_,
         compliance,
@@ -272,7 +272,7 @@ class EnergyConstraintSolver3D_Warp:
                 topo,
                 x_old,
                 Dm_inv_all,
-                b_inv,
+                k_inv,
                 lambda_old,
                 gamma_,
                 compliance,
