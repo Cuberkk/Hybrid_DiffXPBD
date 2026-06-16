@@ -110,12 +110,15 @@ def update_k_inv_from_youngs_kernel(
     avg_edge: float,
     selected_vid: int,
     b_amp: wp.array(dtype=wp.float32),
-    mass_vertex: wp.array(dtype=wp.float32)
+    mass_vertex: wp.array(dtype=wp.float32),
+    sum_scale: float,
+    mass_damp_ratio: float,
 ):
     v = wp.tid()
     E = youngs[0]
     nu = poisson_ratio
-    damping = (4.0 * dt * E * b_amp[0]) / ((1.0 + nu) * avg_edge * avg_edge)
+    sum = sum_scale * dt * (4.0 * dt * E * b_amp[0]) / ((1.0 + nu) * avg_edge * avg_edge)
+    damping = sum / (1. + mass_damp_ratio)
     k = damping * dt + mass_vertex[v]
 
     if fixed_mask[v] == 1 or v == selected_vid:
@@ -347,7 +350,7 @@ class DiffXPBDTapeFramework3D_Warp:
         target_unit: str = "mm",
         dt: float = 1.e-2,
         gravity_vec: tuple[float, float, float] = (0.0, -9.81, 0.0),
-        mass_total: float = 1.0,
+        mass_vertex: float = 1.0,
         poisson_ratio: float = 0.48,
         compliance_modulation: float = 1.e-2,
 
@@ -366,6 +369,8 @@ class DiffXPBDTapeFramework3D_Warp:
         force_amplification: float = 1.e0,
         damping_amplification: float = 0.1,
         mass_amplification: float = 1.0,
+        factor_sum_scale: float = 0.5,
+        damp_mass_ratio: float = 0.3, ## Recommended to be 0.01 - 0.3
         sweep_count: int = 20,
 
         position_effector_path: str = None,
@@ -417,7 +422,7 @@ class DiffXPBDTapeFramework3D_Warp:
         self.dt = float(dt)
         self.gravity_vec = np.asarray(gravity_vec, dtype=np.float32) * self.acceleration_modulation
         self.mass_amplification = float(mass_amplification)
-        self.mass_total = float(mass_total) * self.mass_amplification
+        self.mass_per_vertex = float(mass_vertex) * self.mass_amplification
         self.poisson_ratio = float(poisson_ratio)
         self.compliance_modulation = float(compliance_modulation)
         self.sweep_count = int(sweep_count)
@@ -429,10 +434,6 @@ class DiffXPBDTapeFramework3D_Warp:
         self.boundary_indices = self.mesh.get_oriented_boundary_faces_numpy().astype(np.int32)
         self.gripper_edge_indices = self.mesh.E_np.reshape(-1).astype(np.int32)
 
-        self.mass_per_vertex = self.mass_total / float(self.mesh.nv)
-        self.mass_vertex_np = np.full(self.mesh.nv, self.mass_per_vertex, dtype=np.float32)
-        self.mass_per_vertex_field = wp.array(self.mass_vertex_np, dtype=wp.float32, device=self.device, requires_grad=True)
-
         self.pc = PropertyCalculator3D_Warp(
             self.mesh,
             device=self.device,
@@ -442,7 +443,18 @@ class DiffXPBDTapeFramework3D_Warp:
         self.avg_edge = self.pc.avg_len
         self.drag_pick_radius = max(2.0 * float(self.avg_edge), 1e-3)
 
-        ##### Load Gripper Mesh #####
+        ### Damping and Mass factor assignment
+        self.factor_sum_scale = float(factor_sum_scale)
+        self.factor_sum = self.factor_sum_scale * dt * (4.0 * dt * (youngs_init * self.stress_modulation) * damping_amplification) / ((1.0 + poisson_ratio) * self.avg_edge * self.avg_edge)
+        self.mass_per_vertex =  self.factor_sum / (damp_mass_ratio + 1.)
+        self.mass_damp_ratio = 1. / damp_mass_ratio
+        self.damping_term_np = self.factor_sum - self.mass_per_vertex
+        self.damping_fact_np = self.damping_term_np / dt
+        self.mass_total = self.mass_per_vertex * float(self.mesh.nv)
+        self.mass_vertex_np = np.full(self.mesh.nv, self.mass_per_vertex, dtype=np.float32)
+        self.mass_per_vertex_field = wp.array(self.mass_vertex_np, dtype=wp.float32, device=self.device, requires_grad=True)
+
+        ##### Load Keypoints Mapper #####
         self.keypointmapper = KeyPointsBarrycentric(position_effector_path, self.mesh, device)
         self.keypoints_pos = wp.array(self.keypointmapper.keypoints, dtype=wp.vec3, device=self.device)
 
@@ -689,7 +701,9 @@ class DiffXPBDTapeFramework3D_Warp:
                     float(self.avg_edge), 
                     int(self.selected_vid), 
                     damping_amp,
-                    mass_vertex],
+                    mass_vertex,
+                    self.factor_sum_scale,
+                    self.mass_damp_ratio,],
             device=self.device,
         )
 
@@ -1416,8 +1430,11 @@ class DiffXPBDTapeFramework3D_Warp:
             return 'Negative'
 
     def _draw_my_overlay(self,):
-        self.my_label.text = f"Youngs: {self.youngs_np:.2f}"
-        self.my_label.text += f"\nYoungs Log: {self.youngs_log_np:.2f}"
+        self.my_label.text = f"Simulation setup:"
+        self.my_label.text += f"\nYoungs: {self.youngs_np:.2f}, Youngs Log: {self.youngs_log_np:.2f}"
+        self.my_label.text += f"\nMass per Vertex: {self.mass_per_vertex:.2f}, Total Mass: {self.mass_total:.2f}"
+        self.my_label.text += f"\nDamping * dt: {self.damping_term_np:.2f}, Damping: {self.damping_fact_np:.2f}"
+        self.my_label.text = f"\n\nReal-time parameters:"
         self.my_label.text += f"\nStep: {self.step+1}/{self.total_steps}\nTimes: {(self.step+1)*self.dt:.2f}/{self.total_time}s"
         self.my_label.text += f"\nApplied Force: ({self.applied_force_np[0]:.2e}, {self.applied_force_np[1]:.2e}, {self.applied_force_np[2]:.2e})"
         self.my_label.text += f"\nF_free_elastic: ({self.total_free_node_force[0]:.2e}, {self.total_free_node_force[1]:.2e}, {self.total_free_node_force[2]:.2e})"

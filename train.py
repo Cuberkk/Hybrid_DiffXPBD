@@ -81,7 +81,7 @@ def main(total_time=50.,
         target_unit="mm",
         dt=dt,
         gravity_vec=(0.,  -0., 0.),
-        mass_total=0.00729,
+        mass_vertex=0.00729,
         poisson_ratio=0.48,
         compliance_modulation=1e-2,
         
