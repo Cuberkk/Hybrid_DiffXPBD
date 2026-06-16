@@ -1484,13 +1484,13 @@ class DiffXPBDTapeFramework3D_Warp:
         self.my_label.text += f"\nYoungs: {self.youngs_np:.2f}, Youngs Log: {self.youngs_log_np:.2f}"
         self.my_label.text += f"\nMass per Vertex: {self.mass_per_vertex:.2f}, Total Mass: {self.mass_total:.2f}"
         self.my_label.text += f"\nDamping * dt: {self.damping_term_np:.2f}, Damping: {self.damping_fact_np:.2f}"
-        self.my_label.text = f"\n\nReal-time parameters:"
+        self.my_label.text += f"\n\nReal-time parameters:"
         self.my_label.text += f"\nStep: {self.step+1}/{self.total_steps}\nTimes: {(self.step+1)*self.dt:.2f}/{self.total_time}s"
         self.my_label.text += f"\nApplied Force: ({self.applied_force_np[0]:.2e}, {self.applied_force_np[1]:.2e}, {self.applied_force_np[2]:.2e})"
-        self.my_label.text += f"\nF_free_elastic: ({self.total_free_node_force[0]:.2e}, {self.total_free_node_force[1]:.2e}, {self.total_free_node_force[2]:.2e})"
-        self.my_label.text += f"\nF_fix_elastic: ({self.total_fix_node_force[0]:.2e}, {self.total_fix_node_force[1]:.2e}, {self.total_fix_node_force[2]:.2e})"
-        self.my_label.text += f"\nF_total_elastic: ({self.total_node_force[0]:.2e}, {self.total_node_force[1]:.2e}, {self.total_node_force[2]:.2e})"
-        self.my_label.text += f"\nF_applied: ({self.applied_node_force[0]:.2e}, {self.applied_node_force[1]:.2e}, {self.applied_node_force[2]:.2e})"
+        # self.my_label.text += f"\nF_free_elastic: ({self.total_free_node_force[0]:.2e}, {self.total_free_node_force[1]:.2e}, {self.total_free_node_force[2]:.2e})"
+        # self.my_label.text += f"\nF_fix_elastic: ({self.total_fix_node_force[0]:.2e}, {self.total_fix_node_force[1]:.2e}, {self.total_fix_node_force[2]:.2e})"
+        # self.my_label.text += f"\nF_total_elastic: ({self.total_node_force[0]:.2e}, {self.total_node_force[1]:.2e}, {self.total_node_force[2]:.2e})"
+        # self.my_label.text += f"\nF_applied: ({self.applied_node_force[0]:.2e}, {self.applied_node_force[1]:.2e}, {self.applied_node_force[2]:.2e})"
         if self.target_trajectory is not None:
                         self.my_label.text += f"\n\nLoss ({self._sign_justification(np.sum(self.loss_hist))}):\nCurrent: {self.loss_hist[-1]:.2e},\nAverage: {np.mean(self.loss_hist):.2e}\nTotal: {np.sum(self.loss_hist):.2e}\n"
         if self.gradient_mode:
