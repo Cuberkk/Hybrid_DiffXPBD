@@ -20,7 +20,7 @@ from utils.ConstraintSolver import (
 )
 from utils.AdamOptimizer import AdamOptimizer
 
-wp.config.verify_autograd_array_access = True
+wp.config.verify_autograd_array_access = False
 
 
 # =========================================================
@@ -110,16 +110,18 @@ def update_k_inv_from_youngs_kernel(
     avg_edge: float,
     selected_vid: int,
     b_amp: wp.array(dtype=wp.float32),
-    mass_vertex: wp.array(dtype=wp.float32),
-    sum_scale: float,
-    mass_damp_ratio: float,
+    sum_scale: wp.array(dtype=wp.float32),
+    damp_mass_ratio: wp.array(dtype=wp.float32),
+    mass_vertex: wp.array(dtype=wp.float32)
 ):
     v = wp.tid()
     E = youngs[0]
     nu = poisson_ratio
-    sum = sum_scale * dt * (4.0 * dt * E * b_amp[0]) / ((1.0 + nu) * avg_edge * avg_edge)
-    damping = sum / (1. + mass_damp_ratio)
-    k = damping * dt + mass_vertex[v]
+    sum = sum_scale[0] * dt * (4.0 * dt * E * b_amp[0]) / ((1.0 + nu) * avg_edge * avg_edge)
+    mass = sum / (1. + damp_mass_ratio[0])
+    damping_term = sum - mass
+    mass_vertex[v] = mass
+    k = damping_term + mass
 
     if fixed_mask[v] == 1 or v == selected_vid:
         k_inv[v] = 1.0e-8
@@ -444,10 +446,15 @@ class DiffXPBDTapeFramework3D_Warp:
         self.drag_pick_radius = max(2.0 * float(self.avg_edge), 1e-3)
 
         ### Damping and Mass factor assignment
-        self.factor_sum_scale = float(factor_sum_scale)
-        self.factor_sum = self.factor_sum_scale * dt * (4.0 * dt * (youngs_init * self.stress_modulation) * damping_amplification) / ((1.0 + poisson_ratio) * self.avg_edge * self.avg_edge)
+        self.factor_sum_scale_np = float(factor_sum_scale)
+        self.factor_sum_scale_wp = wp.array([self.factor_sum_scale_np], dtype=wp.float32, device=self.device, requires_grad=True)
+
+        self.damp_mass_ratio_np = damp_mass_ratio
+        self.damp_mass_ratio_wp = wp.array([self.damp_mass_ratio_np], dtype=wp.float32, device=self.device, requires_grad=True)
+
+        self.factor_sum = self.factor_sum_scale_np * dt * (4.0 * dt * (youngs_init * self.stress_modulation) * damping_amplification) / ((1.0 + poisson_ratio) * self.avg_edge * self.avg_edge)
         self.mass_per_vertex =  self.factor_sum / (damp_mass_ratio + 1.)
-        self.mass_damp_ratio = 1. / damp_mass_ratio
+
         self.damping_term_np = self.factor_sum - self.mass_per_vertex
         self.damping_fact_np = self.damping_term_np / dt
         self.mass_total = self.mass_per_vertex * float(self.mesh.nv)
@@ -560,6 +567,8 @@ class DiffXPBDTapeFramework3D_Warp:
         self.grad_F_hist = []
         self.grad_F_amp_hist = []
         self.grad_damping_amp_hist = []
+        self.grad_factor_sum_scale_hist = []
+        self.grad_damp_mass_ratio_hist = []
 
         self.x_hist = []
         self.kps_hist = []
@@ -701,9 +710,9 @@ class DiffXPBDTapeFramework3D_Warp:
                     float(self.avg_edge), 
                     int(self.selected_vid), 
                     damping_amp,
-                    mass_vertex,
-                    self.factor_sum_scale,
-                    self.mass_damp_ratio,],
+                    self.factor_sum_scale_wp,
+                    self.damp_mass_ratio_wp,
+                    mass_vertex,],
             device=self.device,
         )
 
@@ -812,13 +821,18 @@ class DiffXPBDTapeFramework3D_Warp:
         wp.launch(
             update_lambda_from_local_kernel,
             dim=self.mesh.nt,
-            inputs=[self.lambda_state, self.delta_lambda_local, self.lambda_state],
+            inputs=[self.lambda_state, 
+                    self.delta_lambda_local, 
+                    self.lambda_state],
             device=self.device,
         )
         wp.launch(
             accumulate_global_local_updates_forward_kernel,
             dim=self.mesh.nt,
-            inputs=[self.mesh.Topo, self.pc.vertex_count, self.delta_x_local, self.x_state_curr],
+            inputs=[self.mesh.Topo, 
+                    self.pc.vertex_count, 
+                    self.delta_x_local, 
+                    self.x_state_curr],
             device=self.device,
         )
 
@@ -870,10 +884,18 @@ class DiffXPBDTapeFramework3D_Warp:
         self.applied_force_amp = wp.array([self.series_force_amp_np], dtype=wp.float32, device=self.device, requires_grad=False)
 
         self.update_gamma_from_youngs(self.gamma)
-        self.update_k_inv_from_youngs(self.k_inv, self.damping_amp, self.mass_per_vertex_field)
+        self.update_k_inv_from_youngs(self.k_inv, 
+                                      self.damping_amp, 
+                                      self.mass_per_vertex_field)
         self.update_compliance_from_youngs(self.compliance)
-        self.update_external_force(self.external_force, self.applied_force_field, self.applied_force_amp)
-        self.update_external_part_from_youngs(self.external_force, self.k_inv, self.external_part, self.mass_per_vertex_field, self.x_velocity)
+        self.update_external_force(self.external_force, 
+                                   self.applied_force_field, 
+                                   self.applied_force_amp)
+        self.update_external_part_from_youngs(self.external_force, 
+                                              self.k_inv, 
+                                              self.external_part, 
+                                              self.mass_per_vertex_field, 
+                                              self.x_velocity)
         self.predictor_step_gui()
         self.reset_lambda_states()
 
@@ -917,12 +939,12 @@ class DiffXPBDTapeFramework3D_Warp:
             device=self.device,
         )
 
-    def solve_one_constraint_sweep_tape(self, stage: int, x_tape, b_inv, lambda_tape, gamma, compliance, delta_x_local_tape, delta_lambda_local_tape):
+    def solve_one_constraint_sweep_tape(self, stage: int, x_tape, k_inv, lambda_tape, gamma, compliance, delta_x_local_tape, delta_lambda_local_tape):
         self.solver.solve_all_constraints_local(
             topo=self.mesh.Topo,
             x_old=x_tape[stage],
             Dm_inv_all=self.pc.Dm_inv,
-            k_inv=b_inv,
+            k_inv=k_inv,
             lambda_old=lambda_tape[stage],
             gamma_=gamma,
             compliance=compliance,
@@ -931,6 +953,13 @@ class DiffXPBDTapeFramework3D_Warp:
         )
 
     def accumulate_global_local_updates_tape(self, stage: int, x_tape, lambda_tape, delta_x_local_tape, delta_lambda_local_tape):
+        wp.launch(
+            update_lambda_from_local_kernel,
+            dim=self.mesh.nt,
+            inputs=[lambda_tape[stage], delta_lambda_local_tape[stage], lambda_tape[stage + 1]],
+            device=self.device,
+        )
+
         wp.launch(
             gather_next_x_from_local_kernel,
             dim=self.mesh.nv,
@@ -943,12 +972,6 @@ class DiffXPBDTapeFramework3D_Warp:
                 delta_x_local_tape[stage],
                 x_tape[stage + 1],
             ],
-            device=self.device,
-        )
-        wp.launch(
-            update_lambda_from_local_kernel,
-            dim=self.mesh.nt,
-            inputs=[lambda_tape[stage], delta_lambda_local_tape[stage], lambda_tape[stage + 1]],
             device=self.device,
         )
 
@@ -985,14 +1008,18 @@ class DiffXPBDTapeFramework3D_Warp:
         self.youngs_log = wp.array([self.youngs_log_np], dtype=wp.float32, device=self.device, requires_grad=True)
         # self.youngs = wp.array([self.youngs_np], dtype=wp.float32, device=self.device, requires_grad=True)
         self.youngs = wp.zeros(1, dtype=wp.float32, device=self.device, requires_grad=True)
+
+        self.factor_sum_scale_wp = wp.array([self.factor_sum_scale_np], dtype=wp.float32, device=self.device, requires_grad=True)
+        self.damp_mass_ratio_wp = wp.array([self.damp_mass_ratio_np], dtype=wp.float32, device=self.device, requires_grad=True)
+
         self.damping_amp = wp.array([self.damping_amp_np], dtype=wp.float32, device=self.device, requires_grad=True)
         self.x_tape = [wp.zeros(self.mesh.nv, dtype=wp.vec3, device=self.device, requires_grad=True) for _ in range(self.num_steps)]
         lambda_tape = [wp.zeros(self.mesh.nt, dtype=wp.vec2, device=self.device, requires_grad=True) for _ in range(self.num_steps)]
         delta_x_local_tape = [wp.zeros(self.mesh.nt, dtype=vec12, device=self.device, requires_grad=True) for _ in range(self.sweep_count)]
         delta_lambda_local_tape = [wp.zeros(self.mesh.nt, dtype=wp.vec2, device=self.device, requires_grad=True) for _ in range(self.sweep_count)]
         gamma = wp.zeros(1, dtype=wp.float32, device=self.device, requires_grad=True)
-        b_inv = wp.zeros(self.mesh.nv, dtype=wp.float32, device=self.device, requires_grad=True)
-        mass_vertex = wp.array([self.mass_per_vertex], dtype=wp.float32, device=self.device, requires_grad=True)
+        k_inv = wp.zeros(self.mesh.nv, dtype=wp.float32, device=self.device, requires_grad=True)
+        mass_vertex = wp.zeros(self.mesh.nv, dtype=wp.float32, device=self.device, requires_grad=True)
         compliance = wp.zeros(self.mesh.nt, dtype=wp.mat22, device=self.device, requires_grad=True)
 
         applied_force_amp = wp.array([self.series_force_amp_np], dtype=wp.float32, device=self.device, requires_grad=True)
@@ -1000,17 +1027,33 @@ class DiffXPBDTapeFramework3D_Warp:
         external_part = wp.zeros(self.mesh.nv, dtype=wp.vec3, device=self.device, requires_grad=True)
         keypoints_pos = wp.zeros(self.keypointmapper.kp_num, dtype=wp.vec3f, device=self.device, requires_grad=True)
         with tape:
-            self.update_youngs_from_log(self.youngs_log, self.youngs)
+            self.update_youngs_from_log(self.youngs_log, 
+                                        self.youngs)
             self.update_gamma_from_youngs(gamma)
-            self.update_k_inv_from_youngs(b_inv, self.damping_amp, mass_vertex)
+            self.update_k_inv_from_youngs(k_inv, 
+                                          self.damping_amp, 
+                                          mass_vertex)
             self.update_compliance_from_youngs(compliance)
-            self.update_external_force(external_force, self.applied_force_field, applied_force_amp)
-            self.update_external_part_from_youngs(external_force, b_inv, external_part)
+            self.update_external_force(external_force, 
+                                       self.applied_force_field, 
+                                       applied_force_amp)
+            self.update_external_part_from_youngs(external_force, 
+                                                  k_inv, 
+                                                  external_part,
+                                                  mass_vertex,
+                                                  self.x_velocity)
 
             self.predictor_step_tape(external_part, self.x_tape)
             stage = 0
             for sweep in range(self.sweep_count):
-                self.solve_one_constraint_sweep_tape(stage, self.x_tape, b_inv, lambda_tape, gamma, compliance, delta_x_local_tape, delta_lambda_local_tape)
+                self.solve_one_constraint_sweep_tape(stage, 
+                                                     self.x_tape, 
+                                                     k_inv, 
+                                                     lambda_tape, 
+                                                     gamma, 
+                                                     compliance, 
+                                                     delta_x_local_tape, 
+                                                     delta_lambda_local_tape)
                 self.accumulate_global_local_updates_tape(stage, self.x_tape, lambda_tape, delta_x_local_tape, delta_lambda_local_tape)
                 stage += 1
 
@@ -1032,17 +1075,20 @@ class DiffXPBDTapeFramework3D_Warp:
         grad_F_amp = float(applied_force_amp.grad.numpy()[0]) if applied_force_amp.grad is not None else 0.0
         grad_F = self.applied_force_field.grad.numpy()[0].tolist() if self.applied_force_field.grad is not None else [0.0, 0.0, 0.0]
         grad_damping_amp = float(self.damping_amp.grad.numpy()[0]) if self.damping_amp.grad is not None else 0.0
+        grad_factor_sum_scale = float(self.factor_sum_scale_wp.grad.numpy()[0]) if self.factor_sum_scale_wp.grad is not None else 0.0
+        grad_damp_mass_ratio = float(self.damp_mass_ratio_wp.grad.numpy()[0]) if self.damp_mass_ratio_wp.grad is not None else 0.0
 
         loss = float(self.loss.numpy()[0])
 
         wp.copy(self.x_state_prev, self.x_state_curr)
         wp.copy(self.x_state_curr, self.x_tape[-1])
+        self.calculate_current_velocity(self.x_velocity, self.x_state_prev, self.x_state_curr)
         wp.copy(self.keypoints_pos, keypoints_pos)
         self.youngs_np = float(self.youngs.numpy()[0])
 
-        # self.calculate_local_elastic_force(gamma, compliance)
-        # self.calculate_global_elastic_force_wp()
-        return loss, grad_E_log, grad_F, grad_F_amp, grad_damping_amp
+        self.calculate_local_elastic_force(gamma, compliance)
+        self.calculate_global_elastic_force_wp()
+        return loss, grad_E_log, grad_F, grad_F_amp, grad_damping_amp, grad_factor_sum_scale, grad_damp_mass_ratio
 
     # -----------------------------------------------------
     # utility
@@ -1056,6 +1102,8 @@ class DiffXPBDTapeFramework3D_Warp:
         self.grad_F_hist = []
         self.grad_F_amp_hist = []
         self.grad_damping_amp_hist = []
+        self.grad_factor_sum_scale_hist = []
+        self.grad_damp_mass_ratio_hist = []
         wp.copy(self.x_state_curr, self.mesh.X)
         wp.launch(clear_vec2_kernel, dim=self.mesh.nt, inputs=[self.lambda_state], device=self.device)
 
@@ -1244,12 +1292,14 @@ class DiffXPBDTapeFramework3D_Warp:
             self.aspect = self.opengl_renderer.window.width / self.opengl_renderer.window.height
             self._handle_keyboard()
             if gradient_mode:
-                loss, grad_E_log, grad_F, grad_F_amp, grad_damping_amp = self.run_with_tape(step = self.step)
+                loss, grad_E_log, grad_F, grad_F_amp, grad_damping_amp, grad_factor_sum_scale, grad_damp_mass_ratio = self.run_with_tape(step = self.step)
                 self.loss_hist.append(loss)
                 self.grad_E_log_hist.append(grad_E_log)
                 self.grad_F_hist.append(grad_F)
                 self.grad_F_amp_hist.append(grad_F_amp)
                 self.grad_damping_amp_hist.append(grad_damping_amp)
+                self.grad_factor_sum_scale_hist.append(grad_factor_sum_scale)
+                self.grad_damp_mass_ratio_hist.append(grad_damp_mass_ratio)
             else:
                 loss = self.one_forward_step(step = self.step)
                 self.loss_hist.append(loss)
@@ -1446,6 +1496,8 @@ class DiffXPBDTapeFramework3D_Warp:
         if self.gradient_mode:
             total_grad_F = np.array(self.grad_F_hist).reshape(-1, 3).sum(axis=0)
             self.my_label.text += f"\nYoungs Modulus Log Gradient ({self._sign_justification(np.sum(self.grad_E_log_hist))}):\nCurrent: {self.grad_E_log_hist[-1]:.2e},\nTotal: {np.sum(self.grad_E_log_hist):.2e}\n"
+            self.my_label.text += f"\nSum Scale Gradient ({self._sign_justification(np.sum(self.grad_factor_sum_scale_hist))}):\nCurrent: {self.grad_factor_sum_scale_hist[-1]:.2e},\nTotal: {np.sum(self.grad_factor_sum_scale_hist):.2e}\n"
+            self.my_label.text += f"\nDamp Mass Ratio Gradient ({self._sign_justification(np.sum(self.grad_damp_mass_ratio_hist))}):\nCurrent: {self.grad_damp_mass_ratio_hist[-1]:.2e},\nTotal: {np.sum(self.grad_damp_mass_ratio_hist):.2e}\n"
             self.my_label.text += f"\nForce Amplification Gradient ({self._sign_justification(np.sum(self.grad_F_amp_hist))}):\nCurrent: {self.grad_F_amp_hist[-1]:.2e},\nTotal: {np.sum(self.grad_F_amp_hist):.2e}\n"
             self.my_label.text += f"\nDamping Amplification Gradient ({self._sign_justification(np.sum(self.grad_damping_amp_hist))}):\nCurrent: {self.grad_damping_amp_hist[-1]:.2e},\nTotal: {np.sum(self.grad_damping_amp_hist):.2e}"
             # self.my_label.text += f"\nCurrent Grad F: ({self.grad_F_hist[-1][0]:.2e}, {self.grad_F_hist[-1][1]:.2e}, {self.grad_F_hist[-1][2]:.2e})\nTotal Grad F: ({total_grad_F[0]:.2e}, {total_grad_F[1]:.2e}, {total_grad_F[2]:.2e})"
@@ -1665,12 +1717,14 @@ class DiffXPBDTapeFramework3D_Warp:
     def run_one_XPBD_loop(self, 
                           total_steps: int=100):
         for step in range(total_steps):
-            loss, grad_E_log, grad_F, grad_F_amp, grad_damping_amp = self.run_with_tape(step = step)
+            loss, grad_E_log, grad_F, grad_F_amp, grad_damping_amp, grad_factor_sum_scale, grad_damp_mass_ratio = self.run_with_tape(step = step)
             self.loss_hist.append(loss)
             self.grad_E_log_hist.append(grad_E_log)
             self.grad_F_hist.append(grad_F)
             self.grad_F_amp_hist.append(grad_F_amp)
             self.grad_damping_amp_hist.append(grad_damping_amp)
+            self.grad_factor_sum_scale_hist.append(grad_factor_sum_scale)
+            self.grad_damp_mass_ratio_hist.append(grad_damp_mass_ratio)
 
         if len(self.grad_damping_amp_hist) > total_steps:
             raise ValueError("Storage lists for the loss and gradients are not initialized properly.")
@@ -1681,7 +1735,9 @@ class DiffXPBDTapeFramework3D_Warp:
         total_grad_F = np.array(self.grad_F_hist).reshape(-1, 3).sum(axis=0)
         total_grad_F_amp = np.sum(self.grad_F_amp_hist)
         total_grad_damping_amp = np.sum(self.grad_damping_amp_hist)
-        return avg_loss, total_loss, total_grad_E_log, total_grad_F, total_grad_F_amp, total_grad_damping_amp
+        total_grad_factor_sum_scale = np.sum(self.grad_factor_sum_scale_hist)
+        total_grad_damp_mass_ratio = np.sum(self.grad_damp_mass_ratio_hist)
+        return avg_loss, total_loss, total_grad_E_log, total_grad_F, total_grad_F_amp, total_grad_damping_amp, total_grad_factor_sum_scale, total_grad_damp_mass_ratio
 
     def train(self,
               project_name: str = "default_project",
@@ -1765,7 +1821,7 @@ class DiffXPBDTapeFramework3D_Warp:
         epoch = 0
         while epoch <= max_epochs:
             self.reset_to_rest()
-            avg_loss, total_loss, total_grad_E_log, total_grad_F, total_grad_F_amp, total_grad_damping_amp = self.run_one_XPBD_loop(total_steps=total_steps)
+            avg_loss, total_loss, total_grad_E_log, total_grad_F, total_grad_F_amp, total_grad_damping_amp, total_grad_factor_sum_scale, total_grad_damp_mass_ratio = self.run_one_XPBD_loop(total_steps=total_steps)
 
             avg_loss_history.append(avg_loss)
             log_data["avg_loss"].append(avg_loss)
