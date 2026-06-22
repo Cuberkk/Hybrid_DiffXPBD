@@ -930,7 +930,7 @@ class DiffXPBDTapeFramework3D_Warp:
         self.fix_node_elastic_force.zero_()
         self.total_node_elastic_force.zero_()
         if self.series_force_mode is False or self.series_force_path is None:
-                self.applied_force_field = wp.array(self.vertex_force, dtype=wp.vec3f, device=self.device, requires_grad=True)
+            self.applied_force_field = wp.array(self.vertex_force, dtype=wp.vec3f, device=self.device, requires_grad=True)
         elif step < len(self.applied_vertices_forces):
             self.applied_force_field = self.applied_vertices_forces[step]
         elif step >= len(self.applied_vertices_forces):
