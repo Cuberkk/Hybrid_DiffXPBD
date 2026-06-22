@@ -11,6 +11,7 @@ import shutil
 
 from utils.MeshLoader import MeshLoader3D_Warp
 from utils.KeyPointsBarrycentric import KeyPointsBarrycentric
+from utils.DistriForceCalculator import DisForceCalculator
 from utils.PropertyCalculator import PropertyCalculator3D_Warp
 from utils.ConstraintSolver import (
     EnergyConstraintSolver3D_Warp,
@@ -75,8 +76,8 @@ def fill_gravity_kernel(
     nv: int,
 ):
     i = wp.tid()
-    scale = mass_total / float(nv)
-    out_force[i] = wp.vec3(gx * scale, gy * scale, gz * scale)
+    mass = mass_total / float(nv)
+    out_force[i] = wp.vec3(gx * mass, gy * mass, gz * mass)
 
 @wp.kernel
 def update_youngs_from_log_kernel(
@@ -150,7 +151,19 @@ def update_compliance_from_youngs_kernel(
     compliance[t] = wp.mat22(Hc, 0.0, 0.0, Dc)
 
 @wp.kernel
-def update_external_force_kernel(
+def update_distribute_external_force_kernel(
+    gravity_force: wp.array(dtype=wp.vec3),
+    applied_vertex_force: wp.array(dtype=wp.vec3),
+    applied_mapping: wp.array(dtype=wp.int32),
+    external_force: wp.array(dtype=wp.vec3),
+    applied_force_amp: wp.array(dtype=wp.float32),
+):
+    i = wp.tid()
+    f = gravity_force[i] * applied_force_amp[0] + applied_vertex_force[applied_mapping[i]] * applied_force_amp[0]
+    external_force[i] = f
+
+@wp.kernel
+def update_even_external_force_kernel(
     gravity_force: wp.array(dtype=wp.vec3),
     applied_mask: wp.array(dtype=wp.int32),
     applied_force_per_vertex: wp.array(dtype=wp.vec3f),
@@ -158,11 +171,10 @@ def update_external_force_kernel(
     applied_force_amp: wp.array(dtype=wp.float32),
 ):
     i = wp.tid()
-    f = gravity_force[i]
+    f = gravity_force[i] * applied_force_amp[0]
     if applied_mask[i] == 1:
         f = f + applied_force_per_vertex[0] * applied_force_amp[0]
     external_force[i] = f
-
 
 @wp.kernel
 def update_external_part_from_k_inv_kernel(
@@ -366,6 +378,7 @@ class DiffXPBDTapeFramework3D_Warp:
         constant_applied_force: tuple[float, float, float] = None,
         series_force_path: Optional[str] = None,
         series_force_mode: Optional[bool] = False,
+        distributed_force_mode: Optional[bool] = False,
         
         youngs_init: float = 10 * 1e6,
         force_amplification: float = 1.e0,
@@ -491,6 +504,15 @@ class DiffXPBDTapeFramework3D_Warp:
         self.applied_mask = wp.array(applied_mask_np, dtype=wp.int32, device=self.device)
         self.applied_force_np = np.asarray(constant_applied_force, dtype=np.float32) * self.force_modulation
 
+        self.distributed_force_mode = distributed_force_mode
+        if self.distributed_force_mode:
+            applied_mapping = np.zeros((self.mesh.nv,), dtype=np.int32)
+            applied_mapping[self.applied_idx] = np.arange(len(self.applied_idx),
+                                                        dtype=np.int32)
+            self.applied_mapping_wp = wp.array(applied_mapping, dtype=wp.int32, device=self.device)
+
+            self.dis_force_calculator = DisForceCalculator(self.mesh, self.applied_idx)
+
         # Visualization settings
         self.fixed_idx_np = np.ascontiguousarray(np.array(self.fixed_idx, dtype=np.int32))
         self.applied_idx_np = np.ascontiguousarray(np.array(self.applied_idx, dtype=np.int32))
@@ -527,9 +549,13 @@ class DiffXPBDTapeFramework3D_Warp:
         if self.series_force_path is not None:
             self._initialize_series_forces(self.series_force_path, max(len(self.applied_idx), 1))
 
-        self.per_vertex_force = self.applied_force_np / max(len(self.applied_idx), 1)
-
-        self.applied_force_field = wp.array([wp.vec3(*self.per_vertex_force.tolist())], dtype=wp.vec3f, device=self.device, requires_grad=True)
+        if self.distributed_force_mode:
+            self.vertex_force = self.dis_force_calculator.distribute_force_to_contact_faces(self.applied_force_np).reshape(-1, 3)
+            self.applied_force_field = wp.array(self.vertex_force, dtype=wp.vec3f, device=self.device, requires_grad=True)
+        else:
+            self.vertex_force = self.applied_force_np / max(len(self.applied_idx), 1)
+            self.applied_force_field = wp.array(self.vertex_force, dtype=wp.vec3f, device=self.device, requires_grad=True)
+        
         self.gamma = wp.zeros(1, dtype=wp.float32, device=self.device, requires_grad=True)
         self.loss = wp.zeros(1, dtype=wp.float32, device=self.device, requires_grad=True)
 
@@ -681,14 +707,24 @@ class DiffXPBDTapeFramework3D_Warp:
             for k in range(kp_pos.shape[0])
         ]
 
-
     def _initialize_series_forces(self, series_force_path: str, vertices_num: int):
         data = np.loadtxt(series_force_path, delimiter=',')
-        applied_vertices_forces = (data[:, :-1].reshape(-1, 3) * self.force_modulation) / vertices_num
-        self.applied_vertices_forces = [
-            wp.array(applied_vertices_forces[k].astype(np.float32), dtype=wp.vec3f, device=self.device, requires_grad=True)
-            for k in range(applied_vertices_forces.shape[0])
-        ]
+        applied_total_forces = (data[:, :-1].reshape(-1, 3) * self.force_modulation)
+        if self.distributed_force_mode:
+            self.applied_vertices_forces = [
+                wp.array(self.dis_force_calculator.distribute_force_to_contact_faces(applied_total_forces[k]).reshape(-1, 3),
+                        dtype=wp.vec3f,
+                        device=self.device,
+                        requires_grad=True)
+                for k in range(applied_total_forces.shape[0])
+            ]
+        else:
+            applied_vertices_forces = applied_total_forces / vertices_num
+            self.applied_vertices_forces = [
+                wp.array(applied_vertices_forces[k].astype(np.float32), dtype=wp.vec3f, device=self.device, requires_grad=True)
+                for k in range(applied_vertices_forces.shape[0])
+            ]
+
     # -----------------------------------------------------
     # parameter updates
     # -----------------------------------------------------
@@ -724,13 +760,32 @@ class DiffXPBDTapeFramework3D_Warp:
             device=self.device,
         )
 
-    def update_external_force(self, external_force, applied_force_field, applied_force_amp):
-        wp.launch(
-            update_external_force_kernel,
-            dim=self.mesh.nv,
-            inputs=[self.gravity_vec_field, self.applied_mask, applied_force_field, external_force, applied_force_amp],
-            device=self.device,
-        )
+    def update_external_force(self,
+                              external_force, 
+                              applied_force_field, 
+                              applied_force_amp):
+        if self.distributed_force_mode:
+            wp.launch(
+                update_distribute_external_force_kernel,
+                dim=self.mesh.nv,
+                inputs=[self.gravity_vec_field, 
+                        applied_force_field,
+                        self.applied_mapping_wp,
+                        external_force, 
+                        applied_force_amp],
+                device=self.device,
+            )
+        else:
+            wp.launch(
+                update_even_external_force_kernel,
+                dim=self.mesh.nv,
+                inputs=[self.gravity_vec_field, 
+                        self.applied_mask, 
+                        applied_force_field,
+                        external_force, 
+                        applied_force_amp],
+                device=self.device,
+            )
 
     def update_external_part_from_youngs(self, external_force, k_inv, external_part, mass_vertex, velocity):
         wp.launch(
@@ -874,12 +929,15 @@ class DiffXPBDTapeFramework3D_Warp:
         self.free_node_elastic_force.zero_()
         self.fix_node_elastic_force.zero_()
         self.total_node_elastic_force.zero_()
-        if self.series_force_mode is False:
-            self.applied_force_field = wp.array([wp.vec3(*self.per_vertex_force.tolist())], dtype=wp.vec3f, device=self.device, requires_grad=True)
+        if self.series_force_mode is False or self.series_force_path is None:
+                self.applied_force_field = wp.array(self.vertex_force, dtype=wp.vec3f, device=self.device, requires_grad=True)
         elif step < len(self.applied_vertices_forces):
             self.applied_force_field = self.applied_vertices_forces[step]
         elif step >= len(self.applied_vertices_forces):
-            self.applied_force_field = wp.array([[0,0,0]], dtype=wp.vec3f, device=self.device, requires_grad=True)
+            if self.distributed_force_mode:
+                self.applied_force_field = wp.zeros(len(self.applied_idx_np), dtype=wp.vec3f, device=self.device, requires_grad=True,)
+            else:
+                self.applied_force_field = wp.array([[0,0,0]], dtype=wp.vec3f, device=self.device, requires_grad=True)
 
         self.applied_force_amp = wp.array([self.series_force_amp_np], dtype=wp.float32, device=self.device, requires_grad=False)
 
@@ -889,7 +947,7 @@ class DiffXPBDTapeFramework3D_Warp:
                                       self.mass_per_vertex_field)
         self.update_compliance_from_youngs(self.compliance)
         self.update_external_force(self.external_force, 
-                                   self.applied_force_field, 
+                                   self.applied_force_field,
                                    self.applied_force_amp)
         self.update_external_part_from_youngs(self.external_force, 
                                               self.k_inv, 
@@ -999,7 +1057,7 @@ class DiffXPBDTapeFramework3D_Warp:
         self.fix_node_elastic_force.zero_()
         self.total_node_elastic_force.zero_()
         if self.series_force_mode is False or self.series_force_path is None:
-            self.applied_force_field = wp.array([wp.vec3(*self.per_vertex_force.tolist())], dtype=wp.vec3f, device=self.device, requires_grad=True)
+            self.applied_force_field = wp.array(self.vertex_force, dtype=wp.vec3f, device=self.device, requires_grad=True)
         elif step < len(self.applied_vertices_forces):
             self.applied_force_field = self.applied_vertices_forces[step]
         else:
@@ -1035,7 +1093,6 @@ class DiffXPBDTapeFramework3D_Warp:
                                           mass_vertex)
             self.update_compliance_from_youngs(compliance)
             self.update_external_force(external_force, 
-                                       self.applied_force_field, 
                                        applied_force_amp)
             self.update_external_part_from_youngs(external_force, 
                                                   k_inv, 
@@ -1306,7 +1363,7 @@ class DiffXPBDTapeFramework3D_Warp:
                 if save_frames:
                     self.x_hist.append(self.x_state_curr.numpy())
                     self.kps_hist.append(self.keypoints_pos.numpy())
-            self.applied_force_np = self.applied_force_field.numpy()[0] * max(len(self.applied_idx), 1) / self.force_modulation
+            self.applied_force_np = np.array(np.sum(self.applied_force_field.numpy() / self.force_modulation, axis=0)).reshape(3,)
 
             self.render_opengl_frame(self.step)
 
@@ -1318,7 +1375,7 @@ class DiffXPBDTapeFramework3D_Warp:
                              keypoints=np.array(self.kps_hist),
                              youngs = self.youngs_np,
                              youngs_log = self.youngs_log_np,
-                             applied_force=self.per_vertex_force)
+                             applied_force=self.applied_force_np,)
                 break
         
         # self.opengl_renderer.close()
@@ -1348,14 +1405,17 @@ class DiffXPBDTapeFramework3D_Warp:
 
     def update_render_force_arrows(self,):
         if self.show_force_arrow and self.show_applied_points is not None and len(self.applied_idx_np) > 0:
-            scales = np.linalg.norm(self.applied_force_field.numpy()[0])/(500 * self.series_force_amp_np)
-            scales_tuple = tuple([scales for _ in range(3)])
+            if self.distributed_force_mode:
+                scales = [np.linalg.norm(self.applied_force_field.numpy()[i])/(100 * self.series_force_amp_np) for i in range(len(self.applied_idx_np))]
+            else:
+                scales = np.linalg.norm(self.applied_force_field.numpy()[0])/(500 * self.series_force_amp_np)
+            scales_tuple = [tuple([scale, scale, scale]) for scale in scales] if self.distributed_force_mode else tuple([scales for _ in range(3)])
             self.force_instancer.allocate_instances(
                 positions=[tuple(self.x_state_curr.numpy()[vid]) for vid in self.applied_idx_np],
-                rotations=[self.quat_from_arrow_to_force(self.applied_force_field.numpy()[0]) for _ in range(len(self.applied_idx_np))],
+                rotations=[self.quat_from_arrow_to_force(self.applied_force_field.numpy()[i]) for i in range(len(self.applied_idx_np))] if self.distributed_force_mode else [self.quat_from_arrow_to_force(self.applied_force_field.numpy()[0]) for _ in range(len(self.applied_idx_np))],
                 colors1=[(1.0, 0.0, 0.0) for _ in range(len(self.applied_idx_np))],
                 colors2=[(1.0, 0.0, 0.0) for _ in range(len(self.applied_idx_np))],
-                scalings=[scales_tuple for _ in range(len(self.applied_idx_np))],
+                scalings=[scales_tuple[i] for i in range(len(self.applied_idx_np))] if self.distributed_force_mode else [scales_tuple for _ in range(len(self.applied_idx_np))],
             )
 
     ### Update the camera position
@@ -1808,7 +1868,7 @@ class DiffXPBDTapeFramework3D_Warp:
                 log_data["Youngs_Modulus_log"] = []
                 log_data["Youngs_Modulus_log"].append(self.youngs_log_np)
             elif subject == "Applied_Force":
-                log_data[subject].append(self.per_vertex_force)
+                log_data[subject].append(self.applied_force_np)
             elif subject == "Force_Amplification":
                 log_data[subject].append(self.series_force_amp_np)
             elif subject == "Damping_Amplification":
@@ -1885,12 +1945,12 @@ class DiffXPBDTapeFramework3D_Warp:
                 elif subject == "Applied_Force":
                     if optimize_flag:
                         if self.optimizer is not None:
-                            self.per_vertex_force = self.optimizer[i].step(self.per_vertex_force, total_grad_F)
+                            self.vertex_force = self.optimizer[i].step(self.vertex_force, total_grad_F)
                         else:
-                            self.per_vertex_force -= lr[i] * total_grad_F
+                            self.vertex_force -= lr[i] * total_grad_F
                         print(f"Updating {subject}...") 
 
-                    log_data[subject].append(self.per_vertex_force)
+                    log_data[subject].append(self.vertex_force)
 
                 elif subject == "Force_Amplification":
                     if optimize_flag:
