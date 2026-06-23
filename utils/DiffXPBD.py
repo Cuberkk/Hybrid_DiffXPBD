@@ -1577,7 +1577,7 @@ class DiffXPBDTapeFramework3D_Warp:
         # self.my_label.text += f"\nF_total_elastic: ({self.total_node_force[0]:.2e}, {self.total_node_force[1]:.2e}, {self.total_node_force[2]:.2e})"
         # self.my_label.text += f"\nF_applied: ({self.applied_node_force[0]:.2e}, {self.applied_node_force[1]:.2e}, {self.applied_node_force[2]:.2e})"
         if self.target_trajectory is not None:
-                        self.my_label.text += f"\n\nLoss ({self._sign_justification(np.sum(self.loss_hist))}):\nCurrent: {self.loss_hist[-1]:.2e},\n Current per point: {self.loss_hist[-1]/self.keypointmapper.kp_num:.2e}\nAverage: {np.mean(self.loss_hist):.2e}\nAverage per point: {np.mean(self.loss_hist)/self.keypointmapper.kp_num:.2e}\nTotal: {np.sum(self.loss_hist):.2e}\n"
+                        self.my_label.text += f"\n\nLoss ({self._sign_justification(np.sum(self.loss_hist))}):\nCurrent: {self.loss_hist[-1]:.2e}, \nCurrent per point: {self.loss_hist[-1]/self.keypointmapper.kp_num:.2e}\nAverage: {np.mean(self.loss_hist):.2e}\nAverage per point: {np.mean(self.loss_hist)/self.keypointmapper.kp_num:.2e}\nTotal: {np.sum(self.loss_hist):.2e}\n"
         if self.gradient_mode:
             total_grad_F = np.array(self.grad_F_hist).reshape(-1, 3).sum(axis=0)
             self.my_label.text += f"\nYoungs Modulus Log Gradient ({self._sign_justification(np.sum(self.grad_E_log_hist))}):\nCurrent: {self.grad_E_log_hist[-1]:.2e},\nTotal: {np.sum(self.grad_E_log_hist):.2e}\n"

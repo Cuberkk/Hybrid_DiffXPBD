@@ -123,7 +123,7 @@ def main(total_time=50.,
         thresholding_eps = thresholding_eps_per_vertex * solver.keypointmapper.kp_num
 
     print("\nStarting training...\n")
-    solver.train(project_name = f"{optimize_type}_{trajectory_type}_{contact_pos.capitalize()}_contact_Time_{int(total_time)}s_Max_Epochs_{int(max_epochs)}_Optimized_{optimized_str}",
+    solver.train(project_name = f"{optimize_type}_{trajectory_type}_{contact_pos.capitalize()}_contact_Time_{int(total_time)}s_Max_Epochs_{int(max_epochs)}_Optimized_{optimized_str}_{OPTIMIZED_METHOD[optimized_style_idx]}",
                 contact_pos = contact_pos,
                 stop_condition = STOP_CONDITION[stop_condition_index],
                 convergence_patience = convergence_patience,
