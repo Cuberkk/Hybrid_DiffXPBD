@@ -1051,7 +1051,9 @@ class DiffXPBDTapeFramework3D_Warp:
             device=self.device,
         )
 
-    def run_with_tape(self, step: int):
+    def run_with_tape(self, 
+                      step: int = 0,
+                      opt_params: Optional[List[str]] = None,):
         tape = wp.Tape()
         self.free_node_elastic_force.zero_()
         self.fix_node_elastic_force.zero_()
@@ -1093,6 +1095,7 @@ class DiffXPBDTapeFramework3D_Warp:
                                           mass_vertex)
             self.update_compliance_from_youngs(compliance)
             self.update_external_force(external_force, 
+                                       self.applied_force_field,
                                        applied_force_amp)
             self.update_external_part_from_youngs(external_force, 
                                                   k_inv, 
@@ -1127,13 +1130,35 @@ class DiffXPBDTapeFramework3D_Warp:
         #     filename="tape.dot",
         #     array_labels={ self.youngs_log: "E_log", self.applied_force_field: "F", self.loss: "loss"},
         # )
+        if opt_params is None or "Youngs_Modulus" in opt_params:
+            grad_E_log = float(self.youngs_log.grad.numpy()[0]) if self.youngs_log.grad is not None else 0.0
+        else:
+            grad_E_log = 0.0
 
-        grad_E_log = float(self.youngs_log.grad.numpy()[0]) if self.youngs_log.grad is not None else 0.0
-        grad_F_amp = float(applied_force_amp.grad.numpy()[0]) if applied_force_amp.grad is not None else 0.0
-        grad_F = self.applied_force_field.grad.numpy()[0].tolist() if self.applied_force_field.grad is not None else [0.0, 0.0, 0.0]
-        grad_damping_amp = float(self.damping_amp.grad.numpy()[0]) if self.damping_amp.grad is not None else 0.0
-        grad_factor_sum_scale = float(self.factor_sum_scale_wp.grad.numpy()[0]) if self.factor_sum_scale_wp.grad is not None else 0.0
-        grad_damp_mass_ratio = float(self.damp_mass_ratio_wp.grad.numpy()[0]) if self.damp_mass_ratio_wp.grad is not None else 0.0
+        if opt_params is None or "Force_Amplification" in opt_params:
+            grad_F_amp = float(applied_force_amp.grad.numpy()[0]) if applied_force_amp.grad is not None else 0.0
+        else:
+            grad_F_amp = 0.0
+
+        if opt_params is None or "Applied_Force" in opt_params:
+            grad_F = self.applied_force_field.grad.numpy()[0].tolist() if self.applied_force_field.grad is not None else [0.0, 0.0, 0.0]
+        else:
+            grad_F = [0.0, 0.0, 0.0]
+            
+        if opt_params is None or "Damping_Amplification" in opt_params:
+            grad_damping_amp = float(self.damping_amp.grad.numpy()[0]) if self.damping_amp.grad is not None else 0.0
+        else:
+            grad_damping_amp = 0.0
+        
+        if opt_params is None or "Factor_Sum_Scale" in opt_params:
+            grad_factor_sum_scale = float(self.factor_sum_scale_wp.grad.numpy()[0]) if self.factor_sum_scale_wp.grad is not None else 0.0
+        else:
+            grad_factor_sum_scale = 0.0
+
+        if opt_params is None or "Damp_Mass_Ratio" in opt_params:
+            grad_damp_mass_ratio = float(self.damp_mass_ratio_wp.grad.numpy()[0]) if self.damp_mass_ratio_wp.grad is not None else 0.0
+        else:
+            grad_damp_mass_ratio = 0.0
 
         loss = float(self.loss.numpy()[0])
 
@@ -1552,7 +1577,7 @@ class DiffXPBDTapeFramework3D_Warp:
         # self.my_label.text += f"\nF_total_elastic: ({self.total_node_force[0]:.2e}, {self.total_node_force[1]:.2e}, {self.total_node_force[2]:.2e})"
         # self.my_label.text += f"\nF_applied: ({self.applied_node_force[0]:.2e}, {self.applied_node_force[1]:.2e}, {self.applied_node_force[2]:.2e})"
         if self.target_trajectory is not None:
-                        self.my_label.text += f"\n\nLoss ({self._sign_justification(np.sum(self.loss_hist))}):\nCurrent: {self.loss_hist[-1]:.2e},\nAverage: {np.mean(self.loss_hist):.2e}\nTotal: {np.sum(self.loss_hist):.2e}\n"
+                        self.my_label.text += f"\n\nLoss ({self._sign_justification(np.sum(self.loss_hist))}):\nCurrent: {self.loss_hist[-1]:.2e},\n Current per point: {self.loss_hist[-1]/self.keypointmapper.kp_num:.2e}\nAverage: {np.mean(self.loss_hist):.2e}\nAverage per point: {np.mean(self.loss_hist)/self.keypointmapper.kp_num:.2e}\nTotal: {np.sum(self.loss_hist):.2e}\n"
         if self.gradient_mode:
             total_grad_F = np.array(self.grad_F_hist).reshape(-1, 3).sum(axis=0)
             self.my_label.text += f"\nYoungs Modulus Log Gradient ({self._sign_justification(np.sum(self.grad_E_log_hist))}):\nCurrent: {self.grad_E_log_hist[-1]:.2e},\nTotal: {np.sum(self.grad_E_log_hist):.2e}\n"
@@ -1775,9 +1800,10 @@ class DiffXPBDTapeFramework3D_Warp:
     # Train
     # -----------------------------------------------------
     def run_one_XPBD_loop(self, 
-                          total_steps: int=100):
+                          total_steps: int=100,
+                          opt_params: List[str] = None):
         for step in range(total_steps):
-            loss, grad_E_log, grad_F, grad_F_amp, grad_damping_amp, grad_factor_sum_scale, grad_damp_mass_ratio = self.run_with_tape(step = step)
+            loss, grad_E_log, grad_F, grad_F_amp, grad_damping_amp, grad_factor_sum_scale, grad_damp_mass_ratio = self.run_with_tape(step = step, opt_params=opt_params)
             self.loss_hist.append(loss)
             self.grad_E_log_hist.append(grad_E_log)
             self.grad_F_hist.append(grad_F)
@@ -1873,18 +1899,24 @@ class DiffXPBDTapeFramework3D_Warp:
                 log_data[subject].append(self.series_force_amp_np)
             elif subject == "Damping_Amplification":
                 log_data[subject].append(self.damping_amp_np)
+            elif subject == "Factor_Sum_Scale":
+                log_data[subject].append(self.factor_sum_scale_np)
+            elif subject == "Damp_Mass_Ratio":
+                log_data[subject].append(self.damp_mass_ratio_np)
 
         log_data["avg_loss"] = []
+        log_data["avg_loss_per_point"] = []
         log_data["total_loss"] = []
         log_data["relative_avg_loss_change"] = []
         avg_loss = 1e3
         epoch = 0
         while epoch <= max_epochs:
             self.reset_to_rest()
-            avg_loss, total_loss, total_grad_E_log, total_grad_F, total_grad_F_amp, total_grad_damping_amp, total_grad_factor_sum_scale, total_grad_damp_mass_ratio = self.run_one_XPBD_loop(total_steps=total_steps)
+            avg_loss, total_loss, total_grad_E_log, total_grad_F, total_grad_F_amp, total_grad_damping_amp, total_grad_factor_sum_scale, total_grad_damp_mass_ratio = self.run_one_XPBD_loop(total_steps=total_steps, opt_params=optimize_subject)
 
             avg_loss_history.append(avg_loss)
             log_data["avg_loss"].append(avg_loss)
+            log_data["avg_loss_per_point"].append(avg_loss / self.keypointmapper.kp_num)
             log_data["total_loss"].append(total_loss)
 
             # Convergence check
@@ -1901,9 +1933,15 @@ class DiffXPBDTapeFramework3D_Warp:
                 maximum_epoch_flag = True
                 print("Final optimized parameters performance:")
             else:
-                print(f"Epoch {epoch}:")
-            print(f"Current Young's Modulus Log: {self.youngs_log_np:.2f}, Current Young's Modulus: {self.youngs_np:.2f}, Current Damping Amplification: {self.damping_amp_np:.2f}, Current Force Amplification: {self.series_force_amp_np:.2f}")
-            print(f"Average_loss={avg_loss:.4e}, relative_avg_loss_change={relative_change * 100:.2f}%, total_loss={total_loss:.4e}, total_grad_E_log={total_grad_E_log:.4e}, total_grad_F_amp={total_grad_F_amp:.4e}, total_grad_damping_amp={total_grad_damping_amp:.4e}")
+                print(f"\033[1mEpoch: {epoch}\033[0m")
+            print(f"\033[1mCurrent Parameters\033[0m")
+            print(f"Current Young's Modulus Log: {self.youngs_log_np:.2f}, Current Young's Modulus: {self.youngs_np:.2f}")
+            print(f"Current Factor Sum Scale: {self.factor_sum_scale_np:.2f}, Current Damp Mass Ratio: {self.damp_mass_ratio_np:.2f}")
+            print(f"Current Damping Amplification: {self.damping_amp_np:.2f}, Current Force Amplification: {self.series_force_amp_np:.2f}")
+            print(f"\033[1mGradient Information\033[0m")
+            print(f"Average_loss={avg_loss:.4e}, avg_loss_per_point={avg_loss / self.keypointmapper.kp_num:.4e}, relative_avg_loss_change={relative_change * 100:.2f}%, total_loss={total_loss:.4e}")
+            print(f"Total_grad_sum_scale={total_grad_factor_sum_scale:.4e}, total_grad_damp_mass_ratio={total_grad_damp_mass_ratio:.4e}")
+            print(f"Total_grad_E_log={total_grad_E_log:.4e}, total_grad_F_amp={total_grad_F_amp:.4e}, total_grad_damping_amp={total_grad_damping_amp:.4e}")
 
             if stop_condition == "convergence":
                 if converged_count >= patience:
@@ -1942,6 +1980,24 @@ class DiffXPBDTapeFramework3D_Warp:
                     log_data["Youngs_Modulus_log"].append(self.youngs_log_np)
                     log_data[subject].append(self.youngs_np)
 
+                if subject == "Factor_Sum_Scale":
+                    if optimize_flag:
+                        if self.optimizer is not None:
+                            self.factor_sum_scale_np = self.optimizer[i].step(self.factor_sum_scale_np, total_grad_factor_sum_scale)
+                        else:
+                            self.factor_sum_scale_np -= lr[i] * total_grad_factor_sum_scale
+                        print(f"Updating {subject}...")
+                    log_data[subject].append(self.factor_sum_scale_np)
+                
+                if subject == "Damp_Mass_Ratio":
+                    if optimize_flag:
+                        if self.optimizer is not None:
+                            self.damp_mass_ratio_np = self.optimizer[i].step(self.damp_mass_ratio_np, total_grad_damp_mass_ratio)
+                        else:
+                            self.damp_mass_ratio_np -= lr[i] * total_grad_damp_mass_ratio
+                        print(f"Updating {subject}...")
+                    log_data[subject].append(self.damp_mass_ratio_np)
+
                 elif subject == "Applied_Force":
                     if optimize_flag:
                         if self.optimizer is not None:
@@ -1979,5 +2035,7 @@ class DiffXPBDTapeFramework3D_Warp:
         with open(log_path, 'w') as f:
             json.dump(log_data, f, indent=4, sort_keys=False)
 
-        print(f"Final Young's Modulus Log: {self.youngs_log_np:.2f}, Final Young's Modulus: {self.youngs_np:.2f}, Final Damping Amplification: {self.damping_amp_np:.2f}, Final Force Amplification: ({self.series_force_amp_np:.2f})")
+        print(f"Final Young's Modulus Log: {self.youngs_log_np:.2f}, Final Young's Modulus: {self.youngs_np:.2f}")
+        print(f"Final Factor Sum Scale: {self.factor_sum_scale_np:.2f}, Final Damp Mass Ratio: {self.damp_mass_ratio_np:.2f}")
+        print(f"Final Damping Amplification: {self.damping_amp_np:.2f}, Final Force Amplification: ({self.series_force_amp_np:.2f})")
         return
