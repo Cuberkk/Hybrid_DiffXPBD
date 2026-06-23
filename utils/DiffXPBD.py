@@ -1799,6 +1799,14 @@ class DiffXPBDTapeFramework3D_Warp:
     # -----------------------------------------------------
     # Train
     # -----------------------------------------------------
+    def save_json_atomic(self, data, path):
+        tmp_path = path + ".tmp"
+
+        with open(tmp_path, "w") as f:
+            json.dump(data, f, indent=4, sort_keys=False)
+
+        os.replace(tmp_path, path)
+
     def run_one_XPBD_loop(self, 
                           total_steps: int=100,
                           opt_params: List[str] = None):
@@ -1933,12 +1941,12 @@ class DiffXPBDTapeFramework3D_Warp:
                 maximum_epoch_flag = True
                 print("Final optimized parameters performance:")
             else:
-                print(f"\033[1mEpoch: {epoch}\033[0m")
-            print(f"\033[1mCurrent Parameters\033[0m")
+                print(f"Epoch: {epoch}")
+            print(f"Current Parameters")
             print(f"Current Young's Modulus Log: {self.youngs_log_np:.2f}, Current Young's Modulus: {self.youngs_np:.2f}")
             print(f"Current Factor Sum Scale: {self.factor_sum_scale_np:.2f}, Current Damp Mass Ratio: {self.damp_mass_ratio_np:.2f}")
             print(f"Current Damping Amplification: {self.damping_amp_np:.2f}, Current Force Amplification: {self.series_force_amp_np:.2f}")
-            print(f"\033[1mGradient Information\033[0m")
+            print(f"Gradient Information")
             print(f"Average_loss={avg_loss:.4e}, avg_loss_per_point={avg_loss / self.keypointmapper.kp_num:.4e}, relative_avg_loss_change={relative_change * 100:.2f}%, total_loss={total_loss:.4e}")
             print(f"Total_grad_sum_scale={total_grad_factor_sum_scale:.4e}, total_grad_damp_mass_ratio={total_grad_damp_mass_ratio:.4e}")
             print(f"Total_grad_E_log={total_grad_E_log:.4e}, total_grad_F_amp={total_grad_F_amp:.4e}, total_grad_damping_amp={total_grad_damping_amp:.4e}")
@@ -2028,12 +2036,13 @@ class DiffXPBDTapeFramework3D_Warp:
                             self.damping_amp_np = 1.e-2
                         print(f"Updating {subject}...")
                     log_data[subject].append(self.damping_amp_np)
+            self.save_json_atomic(log_data, log_path)
             print()
             epoch += 1
 
-       # Save the training log
-        with open(log_path, 'w') as f:
-            json.dump(log_data, f, indent=4, sort_keys=False)
+    #    # Save the training log
+    #     with open(log_path, 'w') as f:
+    #         json.dump(log_data, f, indent=4, sort_keys=False)
 
         print(f"Final Young's Modulus Log: {self.youngs_log_np:.2f}, Final Young's Modulus: {self.youngs_np:.2f}")
         print(f"Final Factor Sum Scale: {self.factor_sum_scale_np:.2f}, Final Damp Mass Ratio: {self.damp_mass_ratio_np:.2f}")

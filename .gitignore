@@ -210,3 +210,4 @@ __marimo__/
 .vscode/
 data/*.npz
 *.DS_Store
+hpc_logs/

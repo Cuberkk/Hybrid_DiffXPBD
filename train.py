@@ -5,7 +5,7 @@ from utils.DiffXPBD import DiffXPBDTapeFramework3D_Warp
 
 STOP_CONDITION = ["convergence", "thresholding", "both"]
 OPTIMIZED_METHOD = [None, "simultaneous", "alternating"]
-OPTIMIZE_SUBJECT = ["Youngs_Modulus", "Applied_Force", "Force_Amplification", "Damping_Amplification"]
+OPTIMIZE_SUBJECT = ["Youngs_Modulus", "Applied_Force", "Force_Amplification", "Damping_Amplification", "Factor_Sum_Scale", "Damp_Mass_Ratio"]
 OPTIMIZER = [None, "Adam"]
 
 def main(total_time=50., 
@@ -13,16 +13,21 @@ def main(total_time=50.,
          trajectory_type="kps", # "kps" or "mesh_pts"
          optimize_type = "sim2real", # "sim2sim" or "sim2real"
         
-         mesh_file_path = f"mesh/ad_gripper_less_stiff.msh",
+         mesh_file_path = f"mesh/ad_gripper_less_stiff_refined.msh",
          contact_pos = "mid", # up, mid, down
          sim_target_path = "data/Youngs_9500000_time_200_dt_0.01_sweep_20_damping_amp_1.00e+00.npz",
          constant_applied_force = (-5.0, 0.0, 0.0),
          series_force_mode_switch = True,
          gripper_side = 'left', # 'right' or 'left'
 
+         contact_radius = 12.5, # Contact region radius
+         distributed_force_mode = False, # Use distributed force mode
+
          youngs_init = 95. * 1e6,
          force_amplification = 1.0,
          damping_amplification=1.0, 
+         factor_sum_scale = 0.25,
+         damp_mass_ratio=0.1, 
          sweep_count=20,
 
          kp_init_path = "data/PosEffs_all_pts_left.json",
@@ -36,6 +41,7 @@ def main(total_time=50.,
          alternating_epochs = 100,
          optimized_lr = [2.e-1, 1.e-2],
          thresholding_eps = 1.0e0,
+         thresholding_eps_per_vertex = None,
          optimizer_idx = 0
          ):
     
@@ -90,12 +96,12 @@ def main(total_time=50.,
         fixed_extents=[(20, 10, 5.5)],
         
         applied_center=[(18.85565662, 0, applied_z)],
-        applied_extents=[(2.5, 10, 2)],
+        applied_extents=[(2.5, 10, contact_radius)],
         constant_applied_force = constant_applied_force,
-        show_force_arrow = True,
+        show_force_arrow = False,
         series_force_path=real_applied_force_path,
         series_force_mode=series_force_mode_switch,
-        
+        distributed_force_mode = distributed_force_mode,
 
         camera_pos=(0., 180., 45.2006) if gripper_side == 'right' else (0., -180., 45.2006),
         camera_front=(0.0, -1.0, 0.0) if gripper_side == 'right' else (0.0, 1.0, 0.0),
@@ -105,11 +111,16 @@ def main(total_time=50.,
         youngs_init = youngs_init,
         force_amplification = force_amplification,
         damping_amplification=damping_amplification, 
+        factor_sum_scale = factor_sum_scale,
+        damp_mass_ratio=damp_mass_ratio,
         sweep_count=sweep_count,
 
         position_effector_path = kp_init_path,
 
         device=DEVICE,)
+
+    if thresholding_eps_per_vertex is not None:
+        thresholding_eps = thresholding_eps_per_vertex * solver.keypointmapper.kp_num
 
     print("\nStarting training...\n")
     solver.train(project_name = f"{optimize_type}_{trajectory_type}_{contact_pos.capitalize()}_contact_Time_{int(total_time)}s_Max_Epochs_{int(max_epochs)}_Optimized_{optimized_str}",
@@ -138,13 +149,19 @@ if __name__ == "__main__":
 
     parser.add_argument("-gs", "--gripper_side", type=str, default="left", choices=["left", "right"], help="Side of the gripper")
 
+    parser.add_argument("-cr", "--contact_radius", type=float, default=12.5, help="Contact region radius")
+    parser.add_argument("-distf", "--distributed_force_mode", action="store_true", help="Use distributed force mode")
+    parser.add_argument("-sfms", "--series_force_mode_switch", action="store_true", help="Use series force mode switch")
+
     parser.add_argument("-G", "--youngs_modulus", type=float, default=95. * 1e6, help="Initial Young's Modulus for the simulation")
     parser.add_argument("-famp", "--force_amplification", type=float, default=1.0, help="Initial Force amplification factor")
     parser.add_argument("-damp", "--damping_amplification", type=float, default=1.0, help="Initial Damping amplification factor")
+    parser.add_argument("-sums", "--factor_sum_scale", type=float, default=0.25, help="Initial Factor sum scale")
+    parser.add_argument("-dmr", "--damp_mass_ratio", type=float, default=0.1, help="Initial Damping to mass ratio")
     parser.add_argument("-sc", "--sweep_count", type=int, default=20, help="Number of sweeps for optimization")
 
     parser.add_argument("-e", "--max_epochs", type=int, default=20, help="Total epochs to train (not additional epochs).")
-    parser.add_argument("-optidx", "--optimized_subject_indices", nargs='+', type=int, default=[0], help="Indices of subjects to optimize from the list: 0-Young's Modulus, 1-Applied Force, 2-Force Amplification, 3-Damping Amplification")
+    parser.add_argument("-optidx", "--optimized_subject_indices", nargs='+', type=int, default=[0], help="Indices of subjects to optimize from the list: 0-Young's Modulus, 1-Applied Force, 2-Force Amplification, 3-Damping Amplification, 4-Factor Sum Scale, 5-Damping to Mass Ratio")
     parser.add_argument("-stpidx", "--stop_condition_index", type=int, default=2, help="Index of stop condition: 0-Convergence, 1-Thresholding, 2-Both")
     parser.add_argument("-cpts", "--convergence_patience", type=int, default=5, help="Number of epochs to wait for convergence")
     parser.add_argument("-rct", "--relative_change_threshold", type=float, default=1.0e-3, help="Relative change threshold for convergence")
@@ -152,6 +169,7 @@ if __name__ == "__main__":
     parser.add_argument("-altepochs", "--alternating_epochs", type=int, default=100, help="Number of epochs for each subject in alternating optimization")
     parser.add_argument("-lr", "--learning_rates", nargs='+', type=float, default=[2.e-1, 1.e-2], help="Learning rates for the optimized subjects (order should match optimized_subject_indices)")
     parser.add_argument("-tld_eps", '--thresholding_eps', type=float, default=1.0e0, help="Epsilon value for thresholding stop condition")
+    parser.add_argument("-tld_eps_pv", '--thresholding_eps_per_vertex', type=float, default=None, help="Epsilon value for thresholding stop condition")
     parser.add_argument("-opteridx", "--optimizer_index", type=int, default=0, help="Index of the optimizer to use: 0-None, 1-Adam")
 
     args = parser.parse_args()
@@ -162,10 +180,16 @@ if __name__ == "__main__":
 
          contact_pos=args.contact_pos,
          gripper_side=args.gripper_side,
+         series_force_mode_switch=args.series_force_mode_switch,
+
+         contact_radius=args.contact_radius,
+         distributed_force_mode=args.distributed_force_mode,
 
          youngs_init=args.youngs_modulus,
          force_amplification=args.force_amplification,
          damping_amplification=args.damping_amplification,
+         factor_sum_scale=args.factor_sum_scale,
+         damp_mass_ratio=args.damp_mass_ratio,
          sweep_count=args.sweep_count,
 
          max_epochs=args.max_epochs,
@@ -177,4 +201,5 @@ if __name__ == "__main__":
          alternating_epochs=args.alternating_epochs,
          optimized_lr=args.learning_rates,
          thresholding_eps=args.thresholding_eps,
+         thresholding_eps_per_vertex=args.thresholding_eps_per_vertex,
          optimizer_idx=args.optimizer_index)
