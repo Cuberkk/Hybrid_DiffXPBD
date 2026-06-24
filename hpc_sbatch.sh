@@ -2,7 +2,7 @@
 #SBATCH --job-name=DiffXPBD_Warp_Train
 #SBATCH -p gpu
 #SBATCH --gres=gpu:1
-#SBATCH -C gpul40s
+#SBATCH -C gpu4090
 #SBATCH -N 1
 #SBATCH -c 20
 #SBATCH --time=7-00:00:00
@@ -34,4 +34,4 @@ echo "=============================="
 # Train
 # -----------------------
 cd "${PROJ_DIR}"
-"${PYTHON_BIN}" -u "${PROJ_DIR}/train.py" -t 80. -cnt "down" -e 1000 -optidx 4 5 -stpidx 2 -cpts 5 -optst 1 -altepochs 100 -lr 5.e-3 5.e-3 -opteridx 1
+"${PYTHON_BIN}" -u "${PROJ_DIR}/train.py" -t 100. -cnt "mid" -e 1000 -optidx 4 5 -stpidx 2 -cpts 5 -optst 1 -altepochs 100 -lr 5.e-3 5.e-3 -opteridx 1

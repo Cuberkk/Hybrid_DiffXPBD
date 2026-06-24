@@ -42,7 +42,9 @@ def main(total_time=50.,
          optimized_lr = [2.e-1, 1.e-2],
          thresholding_eps = 1.0e0,
          thresholding_eps_per_vertex = None,
-         optimizer_idx = 0
+         optimizer_idx = 0,
+         
+         additional_note = "default"
          ):
     
     wp.init()
@@ -123,7 +125,7 @@ def main(total_time=50.,
         thresholding_eps = thresholding_eps_per_vertex * solver.keypointmapper.kp_num
 
     print("\nStarting training...\n")
-    solver.train(project_name = f"{optimize_type}_{trajectory_type}_{contact_pos.capitalize()}_contact_Time_{int(total_time)}s_Max_Epochs_{int(max_epochs)}_Optimized_{optimized_str}_{OPTIMIZED_METHOD[optimized_style_idx]}",
+    solver.train(project_name = f"{optimize_type}_{trajectory_type}_{contact_pos.capitalize()}_contact_Time_{int(total_time)}s_Max_Epochs_{int(max_epochs)}_Optimized_{optimized_str}_{OPTIMIZED_METHOD[optimized_style_idx]}_{additional_note}",
                 contact_pos = contact_pos,
                 stop_condition = STOP_CONDITION[stop_condition_index],
                 convergence_patience = convergence_patience,
@@ -172,6 +174,8 @@ if __name__ == "__main__":
     parser.add_argument("-tld_eps_pv", '--thresholding_eps_per_vertex', type=float, default=None, help="Epsilon value for thresholding stop condition")
     parser.add_argument("-opteridx", "--optimizer_index", type=int, default=0, help="Index of the optimizer to use: 0-None, 1-Adam")
 
+    parser.add_argument("-ps", "--additional_note", type=str, default="default", help="Additional note for the training session")
+
     args = parser.parse_args()
 
     main(total_time=args.simulate_time, 
@@ -202,4 +206,5 @@ if __name__ == "__main__":
          optimized_lr=args.learning_rates,
          thresholding_eps=args.thresholding_eps,
          thresholding_eps_per_vertex=args.thresholding_eps_per_vertex,
-         optimizer_idx=args.optimizer_index)
+         optimizer_idx=args.optimizer_index,
+         additional_note=args.additional_note)
