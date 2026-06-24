@@ -34,4 +34,4 @@ echo "=============================="
 # Train
 # -----------------------
 cd "${PROJ_DIR}"
-"${PYTHON_BIN}" -u "${PROJ_DIR}/train.py" -t 100. -cnt "mid" -e 1000 -optidx 4 5 -stpidx 2 -cpts 5 -optst 1 -altepochs 100 -lr 5.e-3 5.e-3 -opteridx 1
+"${PYTHON_BIN}" -u "${PROJ_DIR}/train.py" -t 100. -cnt "mid" -e 1000 -optidx 4 5 -stpidx 2 -cpts 5 -optst 1 -altepochs 100 -lr 5.e-3 5.e-3 -opteridx 1 -tld_eps_pv 0.5 -ps start_with_1_kps

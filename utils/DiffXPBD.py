@@ -1872,6 +1872,7 @@ class DiffXPBDTapeFramework3D_Warp:
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
         train_info = {}
+        train_info["log_directory"] = train_root_dir
         train_info["total_time"] = total_steps * self.dt
         train_info["applied_center_height"] = self.applied_center_height
         train_info["optimize_subject"] = optimize_subject
@@ -1885,6 +1886,11 @@ class DiffXPBDTapeFramework3D_Warp:
             train_info["convergence_patience"] = convergence_patience
             train_info["relative_change_threshold"] = relative_change_threshold
         train_info["avg_loss_eps"] = eps
+        if self.trajctory_type == "kps":
+            train_info["Per_kp_eps"] = eps / self.keypointmapper.kp_num
+        else:
+            train_info["thresholding_eps"] = eps
+
 
         with open(train_info_path, 'w') as f:
             json.dump(train_info, f, indent=4, sort_keys=False)
