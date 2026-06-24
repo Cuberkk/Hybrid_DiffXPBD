@@ -1870,9 +1870,9 @@ class DiffXPBDTapeFramework3D_Warp:
         os.makedirs(gif_save_path, exist_ok=True)
         os.makedirs(os.path.dirname(train_info_path), exist_ok=True)
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        print(f"Training logs will be saved to: {train_root_dir}")
 
         train_info = {}
-        train_info["log_directory"] = train_root_dir
         train_info["total_time"] = total_steps * self.dt
         train_info["applied_center_height"] = self.applied_center_height
         train_info["optimize_subject"] = optimize_subject
