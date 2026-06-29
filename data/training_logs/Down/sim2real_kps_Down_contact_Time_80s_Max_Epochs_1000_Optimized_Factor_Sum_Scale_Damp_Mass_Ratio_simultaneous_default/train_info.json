@@ -12,7 +12,7 @@
     "optimized_method": "simultaneous",
     "max_epochs": 1000,
     "stop_condition": "both",
-    "convergence_patience": 5,
+    "convergence_patience": 3,
     "relative_change_threshold": 0.001,
     "avg_loss_eps": 7.5,
     "Per_kp_eps": 0.5
