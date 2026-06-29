@@ -1,0 +1,19 @@
+{
+    "total_time": 100.0,
+    "applied_center_height": 45.20056126,
+    "optimize_subject": [
+        "Factor_Sum_Scale",
+        "Damp_Mass_Ratio"
+    ],
+    "lr": [
+        0.005,
+        0.005
+    ],
+    "optimized_method": "simultaneous",
+    "max_epochs": 1000,
+    "stop_condition": "both",
+    "convergence_patience": 5,
+    "relative_change_threshold": 0.001,
+    "avg_loss_eps": 15.0,
+    "Per_kp_eps": 1.0
+}
