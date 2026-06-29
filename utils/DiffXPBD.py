@@ -1840,7 +1840,7 @@ class DiffXPBDTapeFramework3D_Warp:
               convergence_patience: int = 5,
               relative_change_threshold: float = 1.e-4,
               optimized_method: str = None,
-              alternating_epochs: int = 20,
+              alternating_epochs_max: int = 20,
               max_epochs: int = 20, 
               lr: List[float] = [1e-3, 1e-3], 
               eps: float = 1.0, 
@@ -1879,7 +1879,7 @@ class DiffXPBDTapeFramework3D_Warp:
         train_info["lr"] = lr
         train_info["optimized_method"] = optimized_method
         if optimized_method == "alternating":
-            train_info["alternating_epochs"] = alternating_epochs
+            train_info["alternating_epochs"] = alternating_epochs_max
         train_info["max_epochs"] = max_epochs
         train_info["stop_condition"] = stop_condition
         if stop_condition == "convergence" or stop_condition == "both":
@@ -1924,6 +1924,9 @@ class DiffXPBDTapeFramework3D_Warp:
         log_data["relative_avg_loss_change"] = []
         avg_loss = 1e3
         epoch = 0
+        alternating_switch = 0
+        alternating_epoch = 0
+        current_subject_idx = 0
         while epoch <= max_epochs:
             self.reset_to_rest()
             avg_loss, total_loss, total_grad_E_log, total_grad_F, total_grad_F_amp, total_grad_damping_amp, total_grad_factor_sum_scale, total_grad_damp_mass_ratio = self.run_one_XPBD_loop(total_steps=total_steps, opt_params=optimize_subject)
@@ -1974,14 +1977,28 @@ class DiffXPBDTapeFramework3D_Warp:
                 print(f"Reached maximum epoch: {max_epochs}. Stopping training.")
                 break
 
+            ## Alternating justification
+            if optimized_method == "alternating":
+                switch_condition = [converged_count >= patience, alternating_epoch >= alternating_epochs_max]
+                if any(switch_condition):
+                    alternating_switch += 1
+                    alternating_epoch = 0
+                    converged_count = 0
+                    if switch_condition[0]:
+                        print(f"Convergence achieved for subject {optimize_subject[current_subject_idx]} at epoch {epoch} with average loss {avg_loss:.2e}. Switching to next subject.")
+                    elif switch_condition[1]:
+                        print(f"Maximum alternating epochs reached for subject {optimize_subject[current_subject_idx]} at epoch {epoch}. Switching to next subject.")
+                current_subject_idx = alternating_switch % opt_subjects_num
+                alternating_epoch += 1
+            else:
+                current_subject_idx = None
+
             for i, subject in enumerate(optimize_subject):
                 if optimized_method == "alternating":
-                    if i != (epoch // alternating_epochs) % opt_subjects_num:
-                        optimize_flag = False
-                    else:
-                        optimize_flag = True
+                    optimize_flag = (i == current_subject_idx)
                 elif optimized_method == None or optimized_method == "simultaneous":
                     optimize_flag = True
+
                 if subject == "Youngs_Modulus":
                     if optimize_flag:
                         if self.optimizer is not None:
