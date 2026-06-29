@@ -1,0 +1,27 @@
+{
+    "Best_Parameters": {
+        "avg_loss_per_point": 8.87523098219047,
+        "Factor_Sum_Scale": 1.0,
+        "Damp_Mass_Ratio": 1.0
+    },
+    "Factor_Sum_Scale": [
+        1.0,
+        0.9000000000040048
+    ],
+    "Damp_Mass_Ratio": [
+        1.0,
+        1.0
+    ],
+    "avg_loss": [
+        133.12846473285705
+    ],
+    "avg_loss_per_point": [
+        8.87523098219047
+    ],
+    "total_loss": [
+        1331284.6473285705
+    ],
+    "relative_avg_loss_change": [
+        0.0
+    ]
+}
