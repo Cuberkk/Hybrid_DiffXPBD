@@ -166,7 +166,7 @@ if __name__ == "__main__":
     parser.add_argument("-optidx", "--optimized_subject_indices", nargs='+', type=int, default=[0], help="Indices of subjects to optimize from the list: 0-Young's Modulus, 1-Applied Force, 2-Force Amplification, 3-Damping Amplification, 4-Factor Sum Scale, 5-Damping to Mass Ratio")
     parser.add_argument("-stpidx", "--stop_condition_index", type=int, default=2, help="Index of stop condition: 0-Convergence, 1-Thresholding, 2-Both")
     parser.add_argument("-cpts", "--convergence_patience", type=int, default=5, help="Number of epochs to wait for convergence")
-    parser.add_argument("-rct", "--relative_change_threshold", type=float, default=1.0e-3, help="Relative change threshold for convergence")
+    parser.add_argument("-rct", "--relative_change_threshold", type=float, default=5.0e-1, help="Relative change threshold for convergence")
     parser.add_argument("-optst", "--optimized_style_idx", type=int, default=0, help="Style of optimization for visualization: 0-None, 1-Simultaneous, 2-alternating")
     parser.add_argument("-altepochs", "--alternating_epochs", type=int, default=100, help="Number of epochs for each subject in alternating optimization")
     parser.add_argument("-lr", "--learning_rates", nargs='+', type=float, default=[2.e-1, 1.e-2], help="Learning rates for the optimized subjects (order should match optimized_subject_indices)")
